@@ -12,7 +12,8 @@ App (PWA) de cotizaciones y facturas para oficios en EE.UU.: pintores, limpieza,
 4. **Link por WhatsApp**: el cliente abre la cotización, firma con su nombre y toca *Aprobar*.
 5. **Orden de trabajo**: la aprobación llega por WhatsApp con un link. Al tocarlo en el teléfono del negocio, la orden se crea sola.
 6. **Seguimiento de la obra**: etapas (visita, materiales, en progreso, revisión, terminado), porcentaje de avance y notas. El cliente recibe un link de seguimiento por WhatsApp cada vez que hay un avance.
-7. **Factura final en PDF**: al terminar el trabajo se genera la factura en PDF (archivo real) con datos de la empresa, del cliente, partidas, pagos recibidos y saldo, lista para mandarla por WhatsApp o correo. Si está pagada, lleva el sello *PAID / PAGADA*.
+7. **Fotos del antes y después (opcional)**: con la cámara o desde la galería, en la cotización o en la orden de trabajo. Se comprimen y se guardan en el teléfono, se pueden mandar al cliente y salen en una página aparte de la factura PDF.
+8. **Factura final en PDF**: al terminar el trabajo se genera la factura en PDF (archivo real) con datos de la empresa, del cliente, partidas, pagos recibidos y saldo, lista para mandarla por WhatsApp o correo. Si está pagada, lleva el sello *PAID / PAGADA*.
 
 ## Dos idiomas
 
@@ -42,6 +43,7 @@ js/icons.js             Íconos
 js/pdf.js               Factura en PDF
 js/i18n.js, i18n-en.js  Traducción de la app al inglés
 js/geo.js               Países y estados de EE.UU.
+js/photos.js            Fotos del antes y después (IndexedDB)
 js/vendor/              jsPDF (licencia MIT) para generar los PDF sin internet
 manifest.webmanifest    Datos de instalación (PWA)
 sw.js                   Service worker (modo sin internet)
@@ -89,7 +91,7 @@ Después pega la dirección del Worker en **Ajustes → Servidor de IA**. La cla
 - Los datos viven en el teléfono, sin cuentas ni sincronización entre dispositivos.
 - La cotización y el seguimiento viajan dentro del link. La aprobación del cliente llega por WhatsApp y la orden se crea al abrir ese link en el teléfono donde se hizo la cotización. Con un backend, esto pasaría solo y en cualquier dispositivo.
 - El alcance del trabajo se muestra tal como se escribe: si el cliente habla inglés, escríbelo en inglés o usa el servidor de IA.
-- El seguimiento todavía no lleva fotos (necesitan un servidor para guardarse).
+- Las fotos viven en el teléfono: no viajan dentro del link de seguimiento. Se envían al cliente con el botón *Enviar fotos* o dentro de la factura PDF. El respaldo JSON no incluye las fotos.
 - Los cobros usan el link de pago del propio negocio (Stripe, Square o PayPal). Más adelante se puede integrar Stripe Connect.
 - El Plan Pro ($12 al mes) se muestra en la app pero todavía no cobra. En Play Store, la suscripción a la app tendrá que cobrarse con Google Play Billing.
 

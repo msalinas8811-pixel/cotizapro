@@ -5,6 +5,7 @@ import { I } from './icons.js';
 import { shareInvoicePdf } from './pdf.js';
 import { COUNTRIES, US_STATES, countryName, stateCode } from './geo.js';
 import { tr, translateDOM, watch } from './i18n.js';
+import { addPhotos, deletePhotos, photoURL, photoFiles } from './photos.js';
 const UI = () => S.settings().appLang || 'es';
 
 let $app = document.getElementById('app');
@@ -773,6 +774,75 @@ function viewProfile() {
   };
 }
 
+
+/* ---------- Fotos del antes y después (opcionales) ---------- */
+const photoList = (q) => ({ before: [...(q?.photos?.before || [])], after: [...(q?.photos?.after || [])] });
+const hasPhotos = (q) => !!(q?.photos?.before?.length || q?.photos?.after?.length);
+
+function photoSectionHTML(kind, ids, editable) {
+  const label = kind === 'before' ? 'Antes' : 'Después';
+  return `<div class="field" data-photos="${kind}">
+    <span class="flabel">${label}</span>
+    <div class="ph-grid">
+      ${ids.map((pid) => `<div class="ph"><img data-ph="${pid}" alt="${label}">${editable ? `<button type="button" class="ph-x" data-rm-ph="${pid}" aria-label="Quitar foto">×</button>` : `<span class="ph-tag">${label}</span>`}</div>`).join('')}
+      ${editable ? `<label class="ph-add"><input type="file" accept="image/*" capture="environment" class="vh" data-add-ph="${kind}">${I.camera}<span>Cámara</span></label>
+      <label class="ph-add"><input type="file" accept="image/*" multiple class="vh" data-add-ph="${kind}">${I.image}<span>Galería</span></label>` : ''}
+    </div>
+    ${editable && !ids.length ? '<span class="small muted">Opcional</span>' : ''}
+  </div>`;
+}
+
+async function hydratePhotos(root) {
+  for (const img of root.querySelectorAll('img[data-ph]')) {
+    if (!img.src) img.src = await photoURL(img.dataset.ph);
+  }
+}
+
+function bindPhotoEditor(root, state, onChange) {
+  const redraw = (kind) => {
+    const el = root.querySelector(`[data-photos="${kind}"]`);
+    if (!el) return;
+    el.outerHTML = photoSectionHTML(kind, state[kind], true);
+    hydratePhotos(root);
+  };
+  root.addEventListener('change', async (e) => {
+    const inp = e.target.closest('[data-add-ph]');
+    if (!inp || !inp.files.length) return;
+    const kind = inp.dataset.addPh;
+    toast('Guardando foto…');
+    try {
+      const ids = await addPhotos([...inp.files]);
+      state[kind].push(...ids);
+      redraw(kind);
+      onChange(state);
+      toast(ids.length > 1 ? 'Fotos agregadas' : 'Foto agregada');
+    } catch (err) {
+      toast('No se pudo guardar la foto');
+    }
+  });
+  root.addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-rm-ph]');
+    if (rm) {
+      const pid = rm.dataset.rmPh;
+      for (const k of ['before', 'after']) state[k] = state[k].filter((x) => x !== pid);
+      deletePhotos([pid]);
+      redraw('before'); redraw('after');
+      onChange(state);
+    }
+  });
+}
+
+// Tocar una foto la abre en grande
+document.addEventListener('click', (e) => {
+  const img = e.target.closest('img[data-ph]');
+  if (!img || !img.src) return;
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${img.src}" alt="">`;
+  lb.onclick = () => lb.remove();
+  document.body.appendChild(lb);
+});
+
 /* ---------- Formulario de cotización ---------- */
 function startDictation(textarea, statusEl, btn) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -822,6 +892,7 @@ function viewQuoteForm(arg, extra) {
   const services = (s.services || '').split(',').map((x) => x.trim()).filter(Boolean);
   const validDays = editing ? Math.max(1, Math.round((q.validUntil - q.createdAt) / 86400000)) : s.validDays;
   const { n: durN, u: durU } = parseDuration(q.duration);
+  const photoState = photoList(q);
   $app.innerHTML = `
     ${topbar(editing ? 'Editar cotización #' + q.number : 'Cotizar servicio', editing ? '#/doc/' + q.id : '#/profile')}
     <form id="qf" class="list" style="gap:14px" novalidate>
@@ -883,6 +954,13 @@ function viewQuoteForm(arg, extra) {
         <span class="small muted">Las condiciones de pago y la garantía salen de tu perfil.</span>
       </div>
 
+      <div class="card g" id="phbox">
+        <span class="label">6 · Fotos del antes y después (opcional)</span>
+        ${photoSectionHTML('before', photoState.before, true)}
+        ${photoSectionHTML('after', photoState.after, true)}
+        <span class="small muted">Puedes agregar las fotos del después más tarde, en la orden de trabajo.</span>
+      </div>
+
       <div class="card g">
         <span class="label v">Resumen</span>
         <div id="tot"></div>
@@ -900,6 +978,8 @@ function viewQuoteForm(arg, extra) {
   });
   const refresh = () => { $app.querySelector('#tot').innerHTML = totalsHTML(tmp()); };
   refresh();
+  hydratePhotos($app);
+  bindPhotoEditor($app.querySelector('#phbox'), photoState, (st) => { if (editing) S.updateQuote(editing.id, { photos: photoList({ photos: st }) }); });
   $app.addEventListener('input', (e) => { if (e.target.closest('#lines') || e.target.matches('#tax, #dep')) refresh(); });
   $app.querySelector('#lines').addEventListener('click', (e) => { const b = e.target.closest('[data-rm]'); if (b) { b.closest('.line').remove(); refresh(); } });
   add.onclick = () => { $app.querySelector('#lines').insertAdjacentHTML('beforeend', lineHTML({ en: '', es: '', note: '', qty: 1, price: 0 }, Date.now())); $app.querySelector('#lines .line:last-child [data-f=en]').focus(); };
@@ -939,7 +1019,7 @@ function viewQuoteForm(arg, extra) {
     client = S.upsertClient({ ...(client ? { id: client.id } : {}), name, phone: cp.value.trim(), email: ce.value.trim(), address: ca.value.trim() });
     const data = {
       clientId: client.id, title: ttl.value.trim(), jobAddress: job.value.trim(), scope: scope.value.trim(), items: t.items,
-      startDate: sd.value, duration: formatDuration(dun.value, duu.value, s.clientLang), taxRate: t.taxRate, depositPct: t.depositPct, exclusions: ex.value.trim()
+      startDate: sd.value, duration: formatDuration(dun.value, duu.value, s.clientLang), photos: photoList({ photos: photoState }), taxRate: t.taxRate, depositPct: t.depositPct, exclusions: ex.value.trim()
     };
     let saved;
     if (editing) {
@@ -1026,6 +1106,7 @@ function viewDoc(id) {
     <div class="row no-print">${chip(q)}
       <div class="seg" role="group" aria-label="Idioma de vista"><button data-l="en" aria-pressed="${L === 'en'}">EN</button><button data-l="es" aria-pressed="${L === 'es'}">ES</button></div></div>
     ${docHTML(p, L)}
+    ${hasPhotos(q) ? `<div class="card g"><span class="label">Fotos del trabajo</span>${q.photos.before.length ? photoSectionHTML('before', q.photos.before, false) : ''}${q.photos.after.length ? photoSectionHTML('after', q.photos.after, false) : ''}</div>` : ''}
     ${q.signature ? `<div class="card g"><span class="label">Aprobada</span><span class="sig" style="font-size:24px;border:none">${esc(q.signature)}</span><span class="small muted">${q.approvedAt ? fullDate(q.approvedAt, UI()) : ''}</span></div>` : ''}
     <div class="list no-print">
       ${q.wo ? `<a class="btn green" href="#/wo/${q.id}">${I.tool} Ver orden de trabajo #${q.wo.number}</a>` : `<button class="btn primary" id="send">${I.whatsapp} Enviar al cliente por WhatsApp</button>`}
@@ -1036,6 +1117,7 @@ function viewDoc(id) {
     </div>
     ${historyHTML(q)}`;
   $app.querySelectorAll('[data-l]').forEach((b) => b.onclick = () => { docLang = b.dataset.l; route(); });
+  hydratePhotos($app);
   const sn = $app.querySelector('#send');
   if (sn) sn.onclick = () => openShare(q, 'estimate');
   const ap = $app.querySelector('#appr');
@@ -1047,7 +1129,7 @@ function viewDoc(id) {
     go('#/wo/' + q.id);
   };
   pdf.onclick = () => window.print();
-  del.onclick = () => { if (confirmT('¿Eliminar esta cotización?')) { S.deleteQuote(q.id); go('#/works'); } };
+  del.onclick = () => { if (confirmT('¿Eliminar esta cotización?')) { deletePhotos([...(q.photos?.before || []), ...(q.photos?.after || [])]); S.deleteQuote(q.id); go('#/works'); } };
 }
 let docLang = null;
 
@@ -1139,6 +1221,12 @@ function viewWorkOrder(id) {
       <a class="btn secondary" href="#/invoice/${q.id}">${I.card} Registrar pagos</a>
     </div>` : ''}
     <div class="card g" style="gap:2px"><span class="label v" style="margin-bottom:6px">Etapas · toca para marcar</span>${stageList(w.stages, UI(), true)}</div>
+    <div class="card g" id="phbox">
+      <span class="label">Fotos del antes y después</span>
+      ${photoSectionHTML('before', photoList(q).before, true)}
+      ${photoSectionHTML('after', photoList(q).after, true)}
+      ${hasPhotos(q) ? `<button type="button" class="btn secondary" id="shph">${I.share} Enviar fotos al cliente</button>` : '<span class="small muted">Opcional. Las fotos también salen en la factura final en PDF.</span>'}
+    </div>
     <form class="card g" id="uf">
       <label class="label" for="ut">Nuevo avance para el cliente</label>
       <textarea id="ut" placeholder="Ej. Terminamos la primera mano en los 3 cuartos. Mañana segunda mano."></textarea>
@@ -1157,6 +1245,20 @@ function viewWorkOrder(id) {
   pct.addEventListener('input', () => { $app.querySelector('.big').textContent = pct.value + '%'; $app.querySelector('.bar > div').style.width = pct.value + '%'; });
   $app.querySelectorAll('[data-stage]').forEach((cb) => cb.addEventListener('change', () => { S.setStage(q.id, Number(cb.dataset.stage), cb.checked); route(); }));
   uf.addEventListener('submit', (e) => { e.preventDefault(); if (!ut.value.trim()) { toast('Escribe el avance'); return; } S.addUpdate(q.id, ut.value); toast('Avance guardado. Envíalo al cliente.'); route(); });
+  hydratePhotos($app);
+  const phState = photoList(q);
+  bindPhotoEditor($app.querySelector('#phbox'), phState, (st) => {
+    const had = hasPhotos(q);
+    S.updateQuote(q.id, { photos: photoList({ photos: st }) });
+    if (had !== hasPhotos(q)) route();
+  });
+  const sp = $app.querySelector('#shph');
+  if (sp) sp.onclick = async () => {
+    const files = [...await photoFiles(q.photos.before, 'antes'), ...await photoFiles(q.photos.after, 'despues')];
+    if (navigator.canShare && navigator.canShare({ files })) {
+      try { await navigator.share({ files, title: S.settings().bizName }); S.updateQuote(q.id, {}, 'Fotos enviadas al cliente'); } catch (e) { /* cancelado */ }
+    } else toast('Tu teléfono no permite compartir fotos desde aquí');
+  };
   const fp = $app.querySelector('#finpdf');
   if (fp) fp.onclick = () => sendInvoicePdf(q, fp);
   st.onclick = () => { if (!c?.phone) { toast('El cliente no tiene WhatsApp guardado'); return; } sendTracking(q); route(); };

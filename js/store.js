@@ -119,6 +119,7 @@ export function newQuote(partial = {}) {
     duration: '',
     exclusions: '',
     wo: null,
+    photos: { before: [], after: [] },
     ...partial
   };
   db.quotes.unshift(q);

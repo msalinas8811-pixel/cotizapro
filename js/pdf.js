@@ -1,6 +1,7 @@
 // CotizaPro — factura en PDF (archivo real) para enviar al cliente por WhatsApp o correo
 import * as S from './store.js';
 import { countryName } from './geo.js';
+import { photoDataURL } from './photos.js';
 
 let jsPDFPromise = null;
 function loadJsPDF() {
@@ -20,10 +21,10 @@ function loadJsPDF() {
 const L10N = {
   en: { inv: 'INVOICE', no: 'Invoice #', date: 'Date', due: 'Due date', wo: 'Work order #', est: 'Estimate #', billTo: 'BILL TO', job: 'JOB', done: 'Completed',
     desc: 'Description', qty: 'Qty', price: 'Unit price', amount: 'Amount', sub: 'Subtotal', tax: 'Tax', total: 'Total', paid: 'Paid', bal: 'Balance due',
-    payments: 'Payments received', pay: 'Pay online', warranty: 'Warranty', terms: 'Terms', thanks: 'Thank you for your business!', stampPaid: 'PAID' },
+    payments: 'Payments received', pay: 'Pay online', photos: 'Before & after photos', before: 'BEFORE', after: 'AFTER', warranty: 'Warranty', terms: 'Terms', thanks: 'Thank you for your business!', stampPaid: 'PAID' },
   es: { inv: 'FACTURA', no: 'Factura #', date: 'Fecha', due: 'Vence', wo: 'Orden de trabajo #', est: 'Cotización #', billTo: 'CLIENTE', job: 'TRABAJO', done: 'Terminado',
     desc: 'Descripción', qty: 'Cant.', price: 'Precio', amount: 'Monto', sub: 'Subtotal', tax: 'Impuesto', total: 'Total', paid: 'Pagado', bal: 'Saldo pendiente',
-    payments: 'Pagos recibidos', pay: 'Pagar en línea', warranty: 'Garantía', terms: 'Condiciones', thanks: '¡Gracias por su preferencia!', stampPaid: 'PAGADA' }
+    payments: 'Pagos recibidos', pay: 'Pagar en línea', photos: 'Fotos del antes y después', before: 'ANTES', after: 'DESPUÉS', warranty: 'Garantía', terms: 'Condiciones', thanks: '¡Gracias por su preferencia!', stampPaid: 'PAGADA' }
 };
 
 const d = (t, L) => t ? new Date(typeof t === 'string' && t.length === 10 ? t + 'T12:00' : t).toLocaleDateString(L === 'es' ? 'es-US' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -169,6 +170,38 @@ export async function buildInvoicePdf(q) {
   doc.text(T.thanks, W / 2, H - 36, { align: 'center' });
   doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(...muted);
   doc.text(clean([s.bizName, s.phone, s.email].filter(Boolean).join('  |  ')), W / 2, H - 22, { align: 'center' });
+
+  // Fotos del antes y después (opcionales)
+  const groups = [['before', q.photos?.before || []], ['after', q.photos?.after || []]].filter(([, ids]) => ids.length);
+  if (groups.length) {
+    doc.addPage();
+    let py = M;
+    doc.setFillColor(10, 15, 31); doc.rect(0, 0, W, 8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...ink);
+    doc.text(clean(T.photos), M, py + 14);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...muted);
+    doc.text(clean(`${T.no}${q.number}  |  ${c.name || ''}  |  ${q.title || ''}`), M, py + 30);
+    py += 50;
+    const gap = 12, cw = (W - 2 * M - gap) / 2, ch = 190;
+    for (const [kind, ids] of groups) {
+      if (py + 30 > H - M) { doc.addPage(); py = M; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...accent);
+      doc.text(clean(T[kind]), M, py); py += 10;
+      for (let i = 0; i < ids.length; i++) {
+        const col = i % 2;
+        if (col === 0 && i > 0) py += ch + gap;
+        if (py + ch > H - M) { doc.addPage(); py = M; }
+        const ph = await photoDataURL(ids[i]);
+        if (!ph) continue;
+        const r = Math.min(cw / ph.w, ch / ph.h);
+        const w = ph.w * r, h = ph.h * r;
+        const x0 = M + col * (cw + gap) + (cw - w) / 2, y0 = py + (ch - h) / 2;
+        doc.setFillColor(241, 245, 249); doc.roundedRect(M + col * (cw + gap), py, cw, ch, 6, 6, 'F');
+        try { doc.addImage(ph.data, 'JPEG', x0, y0, w, h); } catch (e) { /* foto dañada */ }
+      }
+      py += ch + gap + 14;
+    }
+  }
 
   const name = `${L === 'es' ? 'Factura' : 'Invoice'}-${q.number}-${clean(c.name || 'cliente').replace(/\s+/g, '-')}.pdf`;
   return { blob: doc.output('blob'), name };

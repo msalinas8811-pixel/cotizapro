@@ -133,6 +133,14 @@ export const EN = {
   'Guardar cliente': 'Save customer', 'Guardar cambios': 'Save changes', 'Trabajos': 'Jobs', 'Sin trabajos todavía.': 'No jobs yet.', 'Cliente guardado': 'Customer saved',
   'pago vencido': 'payment overdue', 'al día': 'up to date', 'sin trabajos': 'no jobs',
 
+  // Fotos
+  'Antes': 'Before', 'Después': 'After', 'Cámara': 'Camera', 'Galería': 'Gallery', 'Quitar foto': 'Remove photo',
+  '6 · Fotos del antes y después (opcional)': '6 · Before & after photos (optional)', 'Fotos del antes y después': 'Before & after photos',
+  'Puedes agregar las fotos del después más tarde, en la orden de trabajo.': 'You can add the after photos later, in the work order.',
+  'Fotos del trabajo': 'Job photos', 'Enviar fotos al cliente': 'Send photos to customer', 'Opcional. Las fotos también salen en la factura final en PDF.': 'Optional. Photos are also included in the final PDF invoice.',
+  'Guardando foto…': 'Saving photo…', 'Fotos agregadas': 'Photos added', 'Foto agregada': 'Photo added', 'No se pudo guardar la foto': "Couldn't save the photo",
+  'Tu teléfono no permite compartir fotos desde aquí': "Your phone can't share photos from here", 'Fotos enviadas al cliente': 'Photos sent to customer',
+
   // PDF
   'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
 };
