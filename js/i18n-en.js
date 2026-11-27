@@ -1,0 +1,183 @@
+// CotizaPro — textos de la interfaz en inglés (clave = texto en español)
+export const EN = {
+  // General / navegación
+  'Inicio': 'Home', 'Clientes': 'Clients', 'Volver': 'Back', 'Cancelar': 'Cancel', 'Continuar': 'Continue', 'Hola': 'Hi',
+  'Ver todo': 'See all', 'Pendientes': 'Pending', 'Todas': 'All', 'Recientes': 'Recent', 'Pagadas': 'Paid', 'Historial': 'History',
+  'Opcional': 'Optional', 'Resumen': 'Summary', 'Subtotal': 'Subtotal', 'Total': 'Total', 'Impuesto': 'Tax', 'Anticipo': 'Deposit',
+  'Español': 'Spanish', 'Inglés': 'English', 'Enviar': 'Send', 'Unidad': 'Unit', 'días': 'days', 'semanas': 'weeks', 'horas': 'hours',
+  'Cotizar servicio': 'Quote a service', 'Nueva cotización': 'New estimate', 'Cotización creada': 'Estimate created',
+  'Obras y cotizaciones': 'Jobs & estimates', 'Perfil de la empresa': 'Company profile', 'Editar perfil': 'Edit profile',
+  'Editar perfil y ajustes': 'Edit profile & settings', 'Idioma de la app': 'App language',
+
+  // Bienvenida y registro
+  'Cotiza en español.': 'Quote in minutes.', 'Cobra en inglés.': 'Get paid faster.',
+  'Dicta el trabajo con tu voz y tu cliente recibe una cotización profesional lista para firmar y pagar.': 'Describe the job with your voice and your customer gets a professional estimate ready to sign and pay.',
+  'Cotizaciones por voz en 30 segundos': 'Voice estimates in 30 seconds', 'El cliente firma desde su teléfono': 'Customers sign from their phone',
+  'Cobra anticipos y saldos con tarjeta': 'Collect deposits and balances by card', 'Crear cuenta gratis': 'Create free account',
+  'Tus datos se guardan en tu teléfono.': 'Your data is stored on your phone.', 'Cuéntanos de tu negocio': 'Tell us about your business',
+  'Así aparecerá en tus cotizaciones.': 'This is how it will appear on your estimates.', 'Nombre del negocio': 'Business name',
+  '¿A qué te dedicas?': 'What do you do?', 'Pintura': 'Painting', 'Limpieza': 'Cleaning', 'Jardinería': 'Landscaping', 'Handyman': 'Handyman',
+  'Remodelación': 'Remodeling', 'Otro': 'Other', 'País': 'Country', 'Estado': 'State', 'Estado / departamento / provincia': 'State / province / region',
+  'Elige el estado…': 'Choose a state…', 'Teléfono / WhatsApp': 'Phone / WhatsApp', 'Teléfono': 'Phone', 'Correo': 'Email',
+  'Paso 1 de 2': 'Step 1 of 2', 'Paso 2 de 2': 'Step 2 of 2', 'Últimos detalles': 'Final details', 'Puedes cambiar todo después en Ajustes.': 'You can change everything later in Settings.',
+  'Logo (opcional)': 'Logo (optional)', 'Subir logo': 'Upload logo', 'Impuesto (%)': 'Tax (%)', 'Anticipo (%)': 'Deposit (%)',
+  'Link de pago (opcional)': 'Payment link (optional)', 'Tu link de Stripe, Square o PayPal. El cliente lo verá en el botón "Pay".': 'Your Stripe, Square or PayPal link. Your customer will see it on the "Pay" button.',
+  'Empezar a cotizar': 'Start quoting',
+
+  // Países
+  'Estados Unidos': 'United States', 'Canadá': 'Canada', 'México': 'Mexico', 'Puerto Rico': 'Puerto Rico', 'El Salvador': 'El Salvador',
+  'Guatemala': 'Guatemala', 'Honduras': 'Honduras', 'Nicaragua': 'Nicaragua', 'Costa Rica': 'Costa Rica', 'Panamá': 'Panama', 'Belice': 'Belize',
+  'República Dominicana': 'Dominican Republic', 'Cuba': 'Cuba', 'Colombia': 'Colombia', 'Venezuela': 'Venezuela', 'Ecuador': 'Ecuador', 'Perú': 'Peru',
+  'Bolivia': 'Bolivia', 'Chile': 'Chile', 'Argentina': 'Argentina', 'Uruguay': 'Uruguay', 'Paraguay': 'Paraguay', 'Brasil': 'Brazil', 'España': 'Spain', 'Otro país': 'Other country',
+
+  // Inicio
+  'Por cobrar': 'To collect', 'Formulario o dictado por voz': 'Form or voice dictation',
+  'Aún no tienes cotizaciones.': "You don't have any estimates yet.", 'Toca Cotizar servicio para hacer tu primera cotización.': 'Tap Quote a service to create your first estimate.',
+
+  // Estados
+  'Borrador': 'Draft', 'Enviada': 'Sent', 'Aprobada': 'Approved', 'Facturada': 'Invoiced', 'Pagada': 'Paid', 'Pago vencido': 'Overdue',
+  'Obra terminada': 'Job completed', 'Aprobada y firmada': 'Approved & signed',
+
+  // Perfil
+  'Compartir perfil con un cliente': 'Share profile with a customer', 'Link del perfil copiado': 'Profile link copied',
+  'Negocio': 'Business', 'Nombre': 'Name', 'Dueño / responsable': 'Owner / manager', 'Dirección': 'Address', 'Ciudad y código postal': 'City and ZIP code',
+  'Años de experiencia': 'Years of experience', 'Sitio web o redes': 'Website or social media', 'Licencia #': 'License #', 'Asegurado': 'Insured',
+  'Tengo seguro': 'I have insurance', 'Perfil público': 'Public profile', 'Sobre la empresa': 'About the company', 'Servicios (separados por coma)': 'Services (comma separated)',
+  'Garantía': 'Warranty', 'Horario': 'Hours', 'Impuesto (sales tax) %': 'Sales tax %', 'Anticipo predeterminado %': 'Default deposit %',
+  'Validez de cotización (días)': 'Estimate valid for (days)', 'Idioma para el cliente': 'Customer language', 'Términos y garantía (los ve el cliente)': 'Terms and warranty (shown to customers)',
+  'Link de pago con tarjeta': 'Card payment link', 'Crea un link de pago en Stripe, Square o PayPal y pégalo aquí.': 'Create a payment link in Stripe, Square or PayPal and paste it here.',
+  'Servidor de IA (opcional)': 'AI server (optional)', 'Sin esto, la app usa su generador local.': 'Without it, the app uses its built-in generator.',
+  'Guardar ajustes': 'Save settings', 'Plan Gratis': 'Free plan', 'Plan Pro: cotizaciones ilimitadas, cobros y logo por $12/mes (próximamente).': 'Pro plan: unlimited estimates, payments and logo for $12/month (coming soon).',
+  'Exportar respaldo (JSON)': 'Export backup (JSON)', 'Borrar todos los datos': 'Delete all data', 'Cambiar logo': 'Change logo',
+  'Perfil guardado': 'Profile saved', 'Ajustes guardados': 'Settings saved', 'Esto borra todo en este teléfono. ¿Seguro?': 'This deletes everything on this phone. Are you sure?',
+  'Ej. Carlos Painting LLC': 'e.g. Carlos Painting LLC', 'Ej. Carlos Martínez': 'e.g. Carlos Martinez', 'Ej. 4520 Main St': 'e.g. 4520 Main St',
+  'Ej. Houston 77002': 'e.g. Houston 77002', 'Ej. 8.25': 'e.g. 8.25', 'Ej. Family-owned painting company serving Houston since 2012.': 'e.g. Family-owned painting company serving Houston since 2012.',
+  'www.minegocio.com': 'www.mybusiness.com', 'tu@correo.com': 'you@email.com', 'correo@...': 'email@...',
+  'https://cotizapro-ai.tu-cuenta.workers.dev': 'https://cotizapro-ai.your-account.workers.dev',
+
+  // Formulario de cotización
+  '1 · Datos del cliente': '1 · Customer details', '2 · Servicio': '2 · Service', '3 · Partidas y precios': '3 · Line items & prices',
+  '4 · Fechas del trabajo': '4 · Job dates', '5 · Pago y condiciones': '5 · Payment & terms', 'Cliente existente': 'Existing customer',
+  '— Cliente nuevo —': '— New customer —', 'Elegir cliente…': 'Choose customer…', 'Nombre completo *': 'Full name *', 'WhatsApp / teléfono *': 'WhatsApp / phone *',
+  'Dirección del cliente': 'Customer address', 'Tipo de servicio': 'Service type', 'Título del trabajo (lo ve el cliente)': 'Job title (shown to customer)',
+  'Lugar del trabajo': 'Job site', 'Igual que la dirección del cliente': 'Same as customer address', 'Alcance del trabajo (lo lee el cliente tal cual)': 'Scope of work (customer reads it as written)',
+  'Dictar con voz': 'Dictate by voice', 'Generar partidas desde la descripción': 'Generate line items from the description', 'Agregar partida': 'Add line item',
+  'Fecha de inicio': 'Start date', 'Duración estimada': 'Estimated duration', 'La cotización es válida por': 'Estimate valid for',
+  'No incluye (opcional)': 'Not included (optional)', 'Las condiciones de pago y la garantía salen de tu perfil.': 'Payment terms and warranty come from your profile.',
+  'Generar cotización': 'Create estimate', 'Guardar y ver cotización': 'Save and view estimate', 'Ej. Jennifer Smith': 'e.g. Jennifer Smith',
+  'Ej. 120 Oak St, Houston, TX': 'e.g. 120 Oak St, Houston, TX', 'Ej. Interior painting': 'e.g. Interior painting', 'Ej. 3': 'e.g. 3',
+  'Ej. Paint 3 bedrooms, walls and trim, 2 coats. Patch cracks before painting. Move and cover furniture.': 'e.g. Paint 3 bedrooms, walls and trim, 2 coats. Patch cracks before painting. Move and cover furniture.',
+  'Ej. Wallpaper removal, furniture moving': 'e.g. Wallpaper removal, furniture moving',
+  'Description (English)': 'Description (customer)', 'Descripción en español (para ti)': 'Description in Spanish (optional)', 'Detail, e.g. 2 coats': 'Detail, e.g. 2 coats',
+  'Descripción en inglés': 'Description in English', 'Descripción en español': 'Description in Spanish', 'Detalle': 'Detail', 'Quitar partida': 'Remove line item',
+  'Cant.': 'Qty', 'Precio c/u ($)': 'Unit price ($)', 'Escribe el nombre del cliente': "Enter the customer's name", 'Escribe el WhatsApp del cliente': "Enter the customer's WhatsApp",
+  'Agrega al menos una partida con precio': 'Add at least one line item with a price', 'Escribe o dicta la descripción primero': 'Type or dictate the description first',
+  'Partidas agregadas: revisa precios': 'Line items added: review prices', 'Cotización lista': 'Estimate ready', 'Generando…': 'Generating…',
+  'Tu navegador no permite dictado': "Your browser doesn't support dictation", 'Escuchando… toca otra vez para terminar': 'Listening… tap again to stop',
+  'Permite el micrófono': 'Allow the microphone', 'No te escuché, intenta otra vez': "I didn't catch that, try again",
+  'Cotización editada': 'Estimate edited',
+
+  // Dictado (pantalla de voz)
+  'Toca el micrófono y describe el trabajo': 'Tap the microphone and describe the job', 'Lo que dijiste': 'What you said',
+  'Tu navegador no permite dictado: escribe el trabajo abajo': "Your browser doesn't support dictation: type the job below",
+  'Generar cotización en inglés': 'Create estimate', 'Escribir partidas a mano': 'Enter line items manually',
+  'Los precios son sugeridos: revísalos antes de enviar.': 'Prices are suggestions: review them before sending.', 'Empezar a dictar': 'Start dictation',
+  'Detener dictado': 'Stop dictation', 'Escuchando… toca para terminar': 'Listening… tap to stop', 'Listo. Puedes corregir el texto.': 'Done. You can edit the text.',
+  'Permite el micrófono para dictar': 'Allow the microphone to dictate', 'No te escuché bien, intenta otra vez': "I didn't catch that, try again",
+  'Dicta o escribe el trabajo primero': 'Dictate or type the job first', 'Cotización generada con IA': 'Estimate generated with AI', 'Borrador listo: revisa precios': 'Draft ready: review prices',
+  'Ej. Pintar 3 cuartos, dos manos, incluye la pintura. Reparar unas grietas. Cliente Jennifer Smith, en Houston.': 'e.g. Paint 3 bedrooms, two coats, paint included. Repair some cracks. Customer Jennifer Smith, in Houston.',
+
+  // Cotización (documento)
+  'Editar cotización': 'Edit estimate', 'Idioma de vista': 'View language', 'Enviar al cliente por WhatsApp': 'Send to customer on WhatsApp',
+  'Ver como el cliente': 'View as customer', 'El cliente aprobó (crear orden de trabajo)': 'Customer approved (create work order)', 'Descargar PDF': 'Download PDF',
+  'Eliminar cotización': 'Delete estimate', '¿Eliminar esta cotización?': 'Delete this estimate?', 'Nombre de quien aprobó:': 'Name of the person who approved:',
+  'Orden de trabajo creada': 'Work order created', 'Cotización enviada al cliente': 'Estimate sent to customer',
+
+  // Enviar
+  'WhatsApp': 'WhatsApp', 'Mensaje de texto (SMS)': 'Text message (SMS)', 'Más opciones': 'More options', 'Copiar link': 'Copy link', 'Link copiado': 'Link copied',
+  'Agrega el teléfono del cliente para enviar directo.': "Add the customer's phone to send directly.", 'Copia este link:': 'Copy this link:',
+
+  // Aprobación
+  'Aprobación': 'Approval', 'Cotización aprobada': 'Estimate approved', 'Abrir orden de trabajo': 'Open work order',
+  'No encontré esta cotización en este teléfono.': "I couldn't find this estimate on this phone.",
+  'Abre el link en el teléfono donde creaste la cotización.': 'Open the link on the phone where you created the estimate.',
+
+  // Orden de trabajo
+  'Avance de la obra': 'Job progress', 'Porcentaje de avance': 'Progress percentage', 'Etapas · toca para marcar': 'Stages · tap to check',
+  'Nuevo avance para el cliente': 'New update for the customer', 'Ej. Terminamos la primera mano en los 3 cuartos. Mañana segunda mano.': 'e.g. We finished the first coat in all 3 bedrooms. Second coat tomorrow.',
+  'Guardar avance': 'Save update', 'Enviar seguimiento al cliente': 'Send progress to customer', 'Factura y cobro': 'Invoice & payments',
+  'Ver cotización aprobada': 'View approved estimate', 'Avances registrados': 'Updates', 'Trabajo terminado': 'Job completed',
+  'Genera la factura final en PDF y envíala al cliente por WhatsApp o correo.': 'Create the final PDF invoice and send it to your customer by WhatsApp or email.',
+  'Factura final en PDF': 'Final invoice (PDF)', 'Registrar pagos': 'Record payments', 'Escribe el avance': 'Write the update',
+  'Avance guardado. Envíalo al cliente.': 'Update saved. Send it to your customer.', 'El cliente no tiene WhatsApp guardado': "This customer has no WhatsApp saved",
+  'Orden de trabajo creada. Pronto te contactamos para programar.': "Work order created. We'll contact you soon to schedule.",
+  'Visita y medidas': 'Site visit & measurements', 'Materiales comprados': 'Materials purchased', 'Trabajo en progreso': 'Work in progress',
+  'Revisión final con el cliente': 'Final walkthrough with customer', 'Seguimiento enviado al cliente': 'Progress sent to customer', 'Avance de obra registrado': 'Job update saved',
+
+  // Factura
+  'Saldo pendiente': 'Balance due', 'Pagada completa': 'Paid in full', 'Registrar pago recibido': 'Record a payment received', 'Monto ($)': 'Amount ($)',
+  'Método': 'Method', 'Tarjeta': 'Card', 'Zelle': 'Zelle', 'Efectivo': 'Cash', 'Cheque': 'Check', 'Guardar pago': 'Save payment',
+  'Recordatorio de pago': 'Payment reminder', 'Te avisamos para mandarle un mensaje al cliente antes de la fecha': "We'll remind you to message the customer before the due date",
+  'Enviar factura y link de pago': 'Send invoice and payment link', 'Enviar recordatorio ahora': 'Send reminder now', 'Factura en PDF para el cliente': 'PDF invoice for customer',
+  'Escribe el monto': 'Enter the amount', 'Pago guardado': 'Payment saved', 'Factura creada': 'Invoice created', 'Factura enviada al cliente': 'Invoice sent to customer',
+  'Recordatorio enviado': 'Reminder sent', 'Generando PDF…': 'Creating PDF…', 'Factura enviada': 'Invoice sent', 'PDF descargado: envíalo por WhatsApp': 'PDF downloaded: send it by WhatsApp',
+  'No se pudo crear el PDF': "Couldn't create the PDF", 'Factura PDF enviada al cliente': 'PDF invoice sent to customer', 'Factura PDF descargada': 'PDF invoice downloaded',
+
+  // Obras
+  'Nada por aquí todavía.': 'Nothing here yet.', 'No hay obras activas. Cuando un cliente apruebe una cotización, aquí aparece su orden de trabajo.': 'No active jobs. When a customer approves an estimate, its work order shows up here.',
+
+  // Clientes
+  'Agregar cliente': 'Add customer', 'Buscar cliente': 'Search customers', 'Buscar por nombre o dirección': 'Search by name or address',
+  'Todavía no hay clientes. Se agregan solos cuando dictas "cliente…" o puedes tocar +.': 'No customers yet. They are added automatically when you create an estimate, or tap +.',
+  'Nuevo cliente': 'New customer', 'Nombre y apellido': 'First and last name', 'Dirección o ciudad': 'Address or city', 'Ej. 120 Main St, Houston': 'e.g. 120 Main St, Houston',
+  'Guardar cliente': 'Save customer', 'Guardar cambios': 'Save changes', 'Trabajos': 'Jobs', 'Sin trabajos todavía.': 'No jobs yet.', 'Cliente guardado': 'Customer saved',
+  'pago vencido': 'payment overdue', 'al día': 'up to date', 'sin trabajos': 'no jobs',
+
+  // PDF
+  'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
+};
+
+const EN_METHOD = { Tarjeta: 'Card', Efectivo: 'Cash', Cheque: 'Check', Otro: 'Other', Zelle: 'Zelle' };
+
+// Textos con números o nombres
+export const PATTERNS = [
+  [/^(\d+) días$/, '$1 days'],
+  [/^(\d+) de 3 este mes$/, '$1 of 3 this month'],
+  [/^(\d+) pagadas$/, '$1 paid'],
+  [/^(\d+) pendientes?$/, '$1 pending'],
+  [/^(\d+) cotización abierta$/, '$1 open estimate'],
+  [/^Cotización #(\d+)(.*)$/, 'Estimate #$1$2'],
+  [/^Editar cotización #(\d+)$/, 'Edit estimate #$1'],
+  [/^Enviar cotización #(\d+)$/, 'Send estimate #$1'],
+  [/^Enviar factura #(\d+)$/, 'Send invoice #$1'],
+  [/^Factura #(\d+)$/, 'Invoice #$1'],
+  [/^Orden de trabajo #(\d+) creada$/, 'Work order #$1 created'],
+  [/^Orden de trabajo #(\d+)$/, 'Work order #$1'],
+  [/^Ver orden de trabajo #(\d+)$/, 'View work order #$1'],
+  [/^Al (.+)$/, 'To $1'],
+  [/^Cobrado en (.+)$/, 'Collected in $1'],
+  [/^Cobrado (\$.+)$/, 'Collected $1'],
+  [/^Total (\$.+)$/, 'Total $1'],
+  [/^Con saldo · (\d+)$/, 'With balance · $1'],
+  [/^Todos · (\d+)$/, 'All · $1'],
+  [/^En obra · (\d+)%$/, 'In progress · $1%'],
+  [/^En obra · (\d+)$/, 'Active jobs · $1'],
+  [/^Cotizaciones · (\d+)$/, 'Estimates · $1'],
+  [/^saldo (\$.+)$/, 'balance $1'],
+  [/^Vence (.+)$/, 'Due $1'],
+  [/^Anticipo \((\d+(?:\.\d+)?%)\)$/, 'Deposit ($1)'],
+  [/^Trabajo terminado · (.+)$/, 'Job completed · $1'],
+  [/^Nueva cotización para (.+)$/, 'New estimate for $1'],
+  [/^Aprobada y firmada por (.+) \(marcada en la app\)$/, 'Approved and signed by $1 (marked in the app)'],
+  [/^Aprobada y firmada por (.+) \(confirmada por el cliente\)$/, 'Approved and signed by $1 (confirmed by the customer)'],
+  [/^Aprobada y firmada por (.+)$/, 'Approved and signed by $1'],
+  [/^Aprobada \(marcada en la app\)$/, 'Approved (marked in the app)'],
+  [/^Aprobada \(confirmada por el cliente\)$/, 'Approved (confirmed by the customer)'],
+  [/^Pago recibido (.+) \((.+)\)$/, (m, a, b) => `Payment received ${a} (${EN_METHOD[b] || b})`],
+  [/^(.+) aprobó la cotización #(\d+)$/, '$1 approved estimate #$2'],
+  [/^El cliente aprobó la cotización #(\d+)$/, 'The customer approved estimate #$1'],
+  [/^Se creó la orden de trabajo #(\d+)(?: · firmada por (.+))?$/, (m, n, s) => `Work order #${n} was created${s ? ' · signed by ' + s : ''}`],
+  [/^Ya existía la orden de trabajo #(\d+)(?: · firmada por (.+))?$/, (m, n, s) => `Work order #${n} already existed${s ? ' · signed by ' + s : ''}`],
+  [/^Creada (.+)$/, 'Created $1'],
+  [/^Inicio (.+)$/, 'Start $1']
+];

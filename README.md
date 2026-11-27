@@ -14,6 +14,12 @@ App (PWA) de cotizaciones y facturas para oficios en EE.UU.: pintores, limpieza,
 6. **Seguimiento de la obra**: etapas (visita, materiales, en progreso, revisión, terminado), porcentaje de avance y notas. El cliente recibe un link de seguimiento por WhatsApp cada vez que hay un avance.
 7. **Factura final en PDF**: al terminar el trabajo se genera la factura en PDF (archivo real) con datos de la empresa, del cliente, partidas, pagos recibidos y saldo, lista para mandarla por WhatsApp o correo. Si está pagada, lleva el sello *PAID / PAGADA*.
 
+## Dos idiomas
+
+- **Idioma de la app**: español o inglés, para dueños de negocio latinos o estadounidenses. Se elige en la pantalla de bienvenida (botón *English / Español*) y se cambia en Ajustes. El dictado por voz y el generador de partidas entienden los dos idiomas.
+- **Idioma para el cliente**: aparte del idioma de la app. Define en qué idioma reciben el cliente la cotización, la factura PDF, el seguimiento y los mensajes de WhatsApp. El cliente también puede cambiar el idioma desde el link.
+- Los textos en inglés de la interfaz están en `js/i18n-en.js`.
+
 ## Funciones
 
 - **Cotización por voz**: dictado en español desde el micrófono del teléfono. El texto se convierte en partidas con precios sugeridos que se pueden editar.
@@ -34,6 +40,8 @@ js/store.js             Datos (localStorage), cálculos y links para el cliente
 js/parser.js            Dictado en español → partidas en inglés (con IA opcional)
 js/icons.js             Íconos
 js/pdf.js               Factura en PDF
+js/i18n.js, i18n-en.js  Traducción de la app al inglés
+js/geo.js               Países y estados de EE.UU.
 js/vendor/              jsPDF (licencia MIT) para generar los PDF sin internet
 manifest.webmanifest    Datos de instalación (PWA)
 sw.js                   Service worker (modo sin internet)

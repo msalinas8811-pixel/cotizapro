@@ -13,6 +13,7 @@ const defaults = () => ({
     taxRate: 0,          // %
     depositPct: 30,      // %
     clientLang: 'en',    // idioma del cliente: en | es
+    appLang: (typeof navigator !== 'undefined' && /^es/i.test(navigator.language || '')) ? 'es' : 'en', // idioma de la app
     validDays: 30,
     terms: 'Price includes labor and materials listed. Any additional work will be quoted separately. Balance due upon completion.',
     paymentLink: '',     // Link de pago de Stripe / Square / PayPal del negocio
@@ -241,7 +242,8 @@ export function money(n) {
 }
 
 export function dateEs(t) {
-  return new Date(t).toLocaleDateString('es-US', { day: 'numeric', month: 'short' });
+  const en = db.settings.appLang === 'en';
+  return new Date(t).toLocaleDateString(en ? 'en-US' : 'es-US', { day: 'numeric', month: 'short' });
 }
 export function dateEn(t) {
   return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

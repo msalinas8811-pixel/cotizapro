@@ -4,6 +4,8 @@ import { parseDictation } from './parser.js';
 import { I } from './icons.js';
 import { shareInvoicePdf } from './pdf.js';
 import { COUNTRIES, US_STATES, countryName, stateCode } from './geo.js';
+import { tr, translateDOM, watch } from './i18n.js';
+const UI = () => S.settings().appLang || 'es';
 
 let $app = document.getElementById('app');
 const $tab = document.getElementById('tabbar');
@@ -18,9 +20,11 @@ const colorFor = (s) => COLORS[[...(s || '')].reduce((a, c) => a + c.charCodeAt(
 const digits = (p) => (p || '').replace(/\D/g, '');
 const usPhone = (p) => { const d = digits(p); return d.length === 10 ? '1' + d : d; };
 
+const confirmT = (m) => confirm(UI() === 'en' ? tr(m) : m);
+const promptT = (m, v) => prompt(UI() === 'en' ? tr(m) : m, v);
 let toastTimer;
 function toast(msg) {
-  $toast.textContent = msg;
+  $toast.textContent = UI() === 'en' ? tr(msg) : msg;
   $toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $toast.hidden = true; }, 2600);
@@ -161,7 +165,7 @@ function openShare(q, kind) {
     if (k === 'sms') { location.href = `sms:${digits(c?.phone)}?&body=${encodeURIComponent(msg)}`; mark(); }
     if (k === 'native') { try { await navigator.share({ title: S.settings().bizName, text: msg }); mark(); } catch (err) { return; } }
     if (k === 'copy') {
-      try { await navigator.clipboard.writeText(shareUrl(q, kind)); toast('Link copiado'); mark(); } catch (err) { prompt('Copia este link:', shareUrl(q, kind)); mark(); }
+      try { await navigator.clipboard.writeText(shareUrl(q, kind)); toast('Link copiado'); mark(); } catch (err) { promptT('Copia este link:', shareUrl(q, kind)); mark(); }
     }
     close();
     route();
@@ -193,6 +197,7 @@ const readLocation = () => ({ country: $app.querySelector('#co').value, state: $
 function viewWelcome() {
   setTabs(null);
   $app.innerHTML = `
+    <div class="row" style="justify-content:flex-end"><button class="chip gray" id="applang" data-noi18n style="border:1px solid var(--glass-border);padding:8px 14px;font-size:13px;cursor:pointer;color:#fff">${UI() === 'en' ? 'Español' : 'English'}</button></div>
     <div class="hero-logo g">${S.settings().logo ? `<img class="logo-img" src="${esc(S.settings().logo)}" alt="">` : `<div style="color:#0A0F1F">${I.fileCheck}</div>`}</div>
     <div class="col" style="gap:10px;text-align:center;margin-top:10px">
       <span class="label" style="letter-spacing:0.12em">CotizaPro</span>
@@ -207,6 +212,11 @@ function viewWelcome() {
     <div class="spacer"></div>
     <a class="btn primary" href="#/register">Crear cuenta gratis</a>
     <p class="small muted" style="text-align:center">Tus datos se guardan en tu teléfono.</p>`;
+  applang.onclick = () => {
+    const en = UI() !== 'en';
+    S.updateSettings({ appLang: en ? 'en' : 'es', clientLang: en ? 'en' : S.settings().clientLang });
+    route();
+  };
 }
 
 let regStep = 1;
@@ -301,7 +311,7 @@ function viewHome() {
   const owedN = qs.filter((q) => ['approved', 'invoiced'].includes(q.status) && S.totals(q).balance > 0).length;
   const paidMonth = qs.reduce((a, q) => a + (q.payments || []).filter((p) => p.t >= monthStart).reduce((x, p) => x + p.amount, 0), 0);
   const pending = qs.filter((q) => q.status !== 'paid').slice(0, 6);
-  const month = now.toLocaleDateString('es-US', { month: 'short' });
+  const month = now.toLocaleDateString(UI() === 'en' ? 'en-US' : 'es-US', { month: 'short' });
   $app.innerHTML = `
     <div class="row">
       <div class="col"><span class="muted" style="font-size:14px">Hola</span><span class="display" style="font-size:24px;font-weight:700">${esc(s.bizName || 'Mi negocio')}</span></div>
@@ -316,7 +326,7 @@ function viewHome() {
       <span class="col"><span class="display" style="font-size:18px;font-weight:700">Cotizar servicio</span><span style="font-size:13px;color:rgba(255,255,255,0.84)">Formulario o dictado por voz</span></span>
     </a>
     <div class="row"><h2>Pendientes</h2><a href="#/works" style="font-size:13px">Ver todo</a></div>
-    <div class="list">${pending.length ? pending.map((q) => quoteRow(q)).join('') : `<div class="empty g card">Aún no tienes cotizaciones.<br>Toca <b>Nueva cotización</b> y dicta tu primer trabajo.</div>`}</div>`;
+    <div class="list">${pending.length ? pending.map((q) => quoteRow(q)).join('') : `<div class="empty g card"><span>Aún no tienes cotizaciones.</span><br><span>Toca Cotizar servicio para hacer tu primera cotización.</span></div>`}</div>`;
 }
 
 let rec = null;
@@ -346,7 +356,7 @@ function viewNew() {
     mic.addEventListener('click', () => {
       if (rec) { rec.stop(); return; }
       rec = new SR();
-      rec.lang = 'es-US';
+      rec.lang = UI() === 'en' ? 'en-US' : 'es-US';
       rec.continuous = true;
       rec.interimResults = true;
       const base = tx.value ? tx.value.trim() + ' ' : '';
@@ -539,7 +549,7 @@ function viewClients() {
       <a class="item g" href="#/client/${c.id}">
         <span class="avatar" style="background:${colorFor(c.name)}">${esc(initials(c.name))}</span>
         <span class="col" style="flex-grow:1"><span style="font-size:15px;font-weight:600">${esc(c.name)}</span>
-          <span class="small" style="color:${overdue ? 'var(--orange-soft)' : 'var(--muted)'}">${esc([c.address, overdue ? 'pago vencido' : bal > 0 ? 'saldo ' + S.money(bal) : open ? open + ' cotización abierta' : billed ? 'al día' : 'sin trabajos'].filter(Boolean).join(' · '))}</span></span>
+          <span class="small" style="color:${overdue ? 'var(--orange-soft)' : 'var(--muted)'}">${c.address ? `<span data-noi18n>${esc(c.address)} · </span>` : ''}<span>${overdue ? 'pago vencido' : bal > 0 ? 'saldo ' + S.money(bal) : open ? open + ' cotización abierta' : billed ? 'al día' : 'sin trabajos'}</span></span></span>
         <span style="font-size:14px;font-weight:700">${S.money(billed)}</span></a>`).join('') : '<div class="empty g card">Todavía no hay clientes. Se agregan solos cuando dictas "cliente…" o puedes tocar +.</div>'}</div>`;
   const qsEl = $app.querySelector('#qsearch');
   qsEl.addEventListener('input', () => { cliQuery = qsEl.value; const pos = qsEl.selectionStart; route(); const n = $app.querySelector('#qsearch'); n.focus(); n.setSelectionRange(pos, pos); });
@@ -618,6 +628,8 @@ function viewSettings() {
         <div class="setting"><label for="tax" style="font-size:14px">Impuesto (sales tax) %</label><input id="tax" type="number" step="0.01" min="0" value="${s.taxRate}"></div>
         <div class="setting"><label for="dep" style="font-size:14px">Anticipo predeterminado %</label><input id="dep" type="number" min="0" max="100" value="${s.depositPct}"></div>
         <div class="setting"><label for="vd" style="font-size:14px">Validez de cotización (días)</label><input id="vd" type="number" min="1" value="${s.validDays}"></div>
+        <div class="setting"><span style="font-size:14px">Idioma de la app</span>
+          <div class="seg" role="group" aria-label="Idioma de la app" data-noi18n><button type="button" data-applang="es" aria-pressed="${UI() !== 'en'}">Español</button><button type="button" data-applang="en" aria-pressed="${UI() === 'en'}">English</button></div></div>
         <div class="setting"><span style="font-size:14px">Idioma para el cliente</span>
           <div class="seg" role="group" aria-label="Idioma para el cliente"><button type="button" data-lang="en" aria-pressed="${s.clientLang !== 'es'}">Inglés</button><button type="button" data-lang="es" aria-pressed="${s.clientLang === 'es'}">Español</button></div></div>
       </div>
@@ -640,6 +652,7 @@ function viewSettings() {
     </div>`;
   bindLogo($app.querySelector('#logo'), $app.querySelector('#lp'));
   bindLocation();
+  $app.querySelectorAll('[data-applang]').forEach((b) => b.onclick = () => { S.updateSettings({ appLang: b.dataset.applang }); route(); });
   let lang = s.clientLang;
   $app.querySelectorAll('[data-lang]').forEach((b) => b.onclick = () => {
     lang = b.dataset.lang;
@@ -664,7 +677,7 @@ function viewSettings() {
     a.download = `cotizapro-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
   };
-  reset.onclick = () => { if (confirm('Esto borra todo en este teléfono. ¿Seguro?')) { S.resetAll(); go('#/welcome'); } };
+  reset.onclick = () => { if (confirmT('Esto borra todo en este teléfono. ¿Seguro?')) { S.resetAll(); go('#/welcome'); } };
 }
 
 /* ---------- Textos para el cliente (inglés / español) ---------- */
@@ -748,7 +761,7 @@ function viewProfile() {
   const b = bizInfo(true);
   $app.innerHTML = `
     <div class="row"><h1>Perfil de la empresa</h1><a class="icon-btn" href="#/settings" aria-label="Editar perfil">${I.pen}</a></div>
-    ${profileHTML(b, 'es', false)}
+    <div data-noi18n>${profileHTML(b, UI(), false)}</div>
     <a class="btn primary" href="#/quote-form">${I.tool} Cotizar servicio</a>
     <button class="btn secondary" id="shp">${I.share} Compartir perfil con un cliente</button>
     <a class="btn secondary" href="#/settings">${I.gear} Editar perfil y ajustes</a>`;
@@ -756,7 +769,7 @@ function viewProfile() {
     const url = `${appBase()}#/c/${S.encodeShare({ v: 2, kind: 'profile', b: bizInfo(true), lang: S.settings().clientLang })}`;
     const text = `${b.n} — ${url}`;
     if (navigator.share) { try { await navigator.share({ title: b.n, text }); return; } catch (e) { return; } }
-    try { await navigator.clipboard.writeText(url); toast('Link del perfil copiado'); } catch (e) { prompt('Copia este link:', url); }
+    try { await navigator.clipboard.writeText(url); toast('Link del perfil copiado'); } catch (e) { promptT('Copia este link:', url); }
   };
 }
 
@@ -765,7 +778,7 @@ function startDictation(textarea, statusEl, btn) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { toast('Tu navegador no permite dictado'); return null; }
   const r = new SR();
-  r.lang = 'es-US'; r.continuous = true; r.interimResults = true;
+  r.lang = UI() === 'en' ? 'en-US' : 'es-US'; r.continuous = true; r.interimResults = true;
   const base = textarea.value ? textarea.value.trim() + ' ' : '';
   let fin = '';
   r.onresult = (e) => {
@@ -949,7 +962,7 @@ function docHTML(p, L) {
   const desc = (i) => (L === 'es' && i.es ? i.es : i.en || i.es);
   const kv = (k, v) => v ? `<div class="col"><span class="small muted">${k}</span><span style="font-size:14px;font-weight:600">${esc(v)}</span></div>` : '';
   return `
-  <article class="card g doc" style="gap:14px;padding:18px">
+  <article class="card g doc" data-noi18n style="gap:14px;padding:18px">
     <div class="row" style="align-items:flex-start">
       <div class="row" style="gap:12px;justify-content:flex-start;align-items:flex-start;min-width:0">
         ${logoBox(b, 52, 16)}
@@ -1013,7 +1026,7 @@ function viewDoc(id) {
     <div class="row no-print">${chip(q)}
       <div class="seg" role="group" aria-label="Idioma de vista"><button data-l="en" aria-pressed="${L === 'en'}">EN</button><button data-l="es" aria-pressed="${L === 'es'}">ES</button></div></div>
     ${docHTML(p, L)}
-    ${q.signature ? `<div class="card g"><span class="label">Aprobada</span><span class="sig" style="font-size:24px;border:none">${esc(q.signature)}</span><span class="small muted">${q.approvedAt ? fullDate(q.approvedAt, 'es') : ''}</span></div>` : ''}
+    ${q.signature ? `<div class="card g"><span class="label">Aprobada</span><span class="sig" style="font-size:24px;border:none">${esc(q.signature)}</span><span class="small muted">${q.approvedAt ? fullDate(q.approvedAt, UI()) : ''}</span></div>` : ''}
     <div class="list no-print">
       ${q.wo ? `<a class="btn green" href="#/wo/${q.id}">${I.tool} Ver orden de trabajo #${q.wo.number}</a>` : `<button class="btn primary" id="send">${I.whatsapp} Enviar al cliente por WhatsApp</button>`}
       <a class="btn secondary" href="${esc(shareUrl(q))}">${I.eye} Ver como el cliente</a>
@@ -1027,14 +1040,14 @@ function viewDoc(id) {
   if (sn) sn.onclick = () => openShare(q, 'estimate');
   const ap = $app.querySelector('#appr');
   if (ap) ap.onclick = () => {
-    const name = prompt('Nombre de quien aprobó:', S.getClient(q.clientId)?.name || '');
+    const name = promptT('Nombre de quien aprobó:', S.getClient(q.clientId)?.name || '');
     if (name === null) return;
     S.createWorkOrder(q.id, name.trim(), 'marcada en la app');
     toast('Orden de trabajo creada');
     go('#/wo/' + q.id);
   };
   pdf.onclick = () => window.print();
-  del.onclick = () => { if (confirm('¿Eliminar esta cotización?')) { S.deleteQuote(q.id); go('#/works'); } };
+  del.onclick = () => { if (confirmT('¿Eliminar esta cotización?')) { S.deleteQuote(q.id); go('#/works'); } };
 }
 let docLang = null;
 
@@ -1092,7 +1105,7 @@ function stageList(stages, L, editable) {
   return stages.map((x, i) => {
     const [label, done, t] = Array.isArray(x) ? x : [x.label, x.done, x.t];
     const dot = `<span style="width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;${done ? 'background:linear-gradient(135deg,#6EE7B7,#67E8F9);color:#0A0F1F' : 'border:2px solid rgba(255,255,255,0.3);color:transparent'}">${I.check.replace(/width="\d+" height="\d+"/, 'width="14" height="14"')}</span>`;
-    const body = `<span class="col" style="flex-grow:1"><span style="font-size:14px;font-weight:${done ? 600 : 400};color:${done ? '#fff' : 'var(--muted)'}">${esc(trStage(label, L))}</span>${t ? `<span class="small muted">${fullDate(t, L)}</span>` : ''}</span>`;
+    const body = `<span class="col" style="flex-grow:1"><span style="font-size:14px;font-weight:${done ? 600 : 400};color:${done ? '#fff' : 'var(--muted)'}">${esc(editable ? label : trStage(label, L))}</span>${t ? `<span class="small muted">${fullDate(t, L)}</span>` : ''}</span>`;
     return editable
       ? `<label class="row" style="justify-content:flex-start;gap:12px;min-height:48px;cursor:pointer">${dot}${body}<input type="checkbox" data-stage="${i}" ${done ? 'checked' : ''} ${i === 0 ? 'disabled' : ''} class="vh"></label>`
       : `<div class="row" style="justify-content:flex-start;gap:12px;min-height:44px">${dot}${body}</div>`;
@@ -1111,7 +1124,7 @@ function viewWorkOrder(id) {
     <div class="card g" style="gap:8px">
       <div class="row"><span style="font-size:16px;font-weight:700">${esc(q.title || 'Trabajo')}</span>${chip(q)}</div>
       <span class="small muted">${esc(c?.name || '')}${q.jobAddress || c?.address ? ' · ' + esc(q.jobAddress || c.address) : ''}</span>
-      <div class="row small muted"><span>Cotización #${q.number} · ${S.money(S.totals(q).total)}</span><span>${q.startDate ? 'Inicio ' + fullDate(q.startDate, 'es') : ''}</span></div>
+      <div class="row small muted"><span>Cotización #${q.number} · ${S.money(S.totals(q).total)}</span><span>${q.startDate ? 'Inicio ' + fullDate(q.startDate, UI()) : ''}</span></div>
     </div>
     <div class="card g" style="gap:12px">
       <div class="row"><span class="label">Avance de la obra</span><span class="big">${w.progress}%</span></div>
@@ -1120,12 +1133,12 @@ function viewWorkOrder(id) {
       <input id="pct" type="range" min="0" max="100" step="5" value="${w.progress}" style="min-height:32px;padding:0;accent-color:#67E8F9;border:none;background:transparent">
     </div>
     ${w.progress >= 100 ? `<div class="card g" style="background:linear-gradient(135deg,rgba(110,231,183,0.22),rgba(103,232,249,0.18));gap:10px">
-      <span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} Trabajo terminado${q.completedAt ? ' · ' + fullDate(q.completedAt, 'es') : ''}</span>
+      <span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} Trabajo terminado${q.completedAt ? ' · ' + fullDate(q.completedAt, UI()) : ''}</span>
       <span class="small muted">Genera la factura final en PDF y envíala al cliente por WhatsApp o correo.</span>
       <button class="btn green" id="finpdf">${I.print} Factura final en PDF</button>
       <a class="btn secondary" href="#/invoice/${q.id}">${I.card} Registrar pagos</a>
     </div>` : ''}
-    <div class="card g" style="gap:2px"><span class="label v" style="margin-bottom:6px">Etapas · toca para marcar</span>${stageList(w.stages, 'es', true)}</div>
+    <div class="card g" style="gap:2px"><span class="label v" style="margin-bottom:6px">Etapas · toca para marcar</span>${stageList(w.stages, UI(), true)}</div>
     <form class="card g" id="uf">
       <label class="label" for="ut">Nuevo avance para el cliente</label>
       <textarea id="ut" placeholder="Ej. Terminamos la primera mano en los 3 cuartos. Mañana segunda mano."></textarea>
@@ -1138,7 +1151,7 @@ function viewWorkOrder(id) {
       <a class="btn secondary" href="#/doc/${q.id}">${I.file} Ver cotización aprobada</a>
     </div>
     <div class="card g"><span class="label v">Avances registrados</span>
-      ${[...w.updates].reverse().map((u) => `<div class="row" style="align-items:flex-start"><span class="col" style="flex-grow:1"><span style="font-size:14px">${esc(u.text)}</span><span class="small muted">${fullDate(u.t, 'es')} · ${u.pct}%</span></span></div>`).join('<div class="sep"></div>')}
+      ${[...w.updates].reverse().map((u) => `<div class="row" style="align-items:flex-start"><span class="col" style="flex-grow:1"><span style="font-size:14px">${esc(u.text)}</span><span class="small muted">${fullDate(u.t, UI())} · ${u.pct}%</span></span></div>`).join('<div class="sep"></div>')}
     </div>`;
   pct.addEventListener('change', () => { S.setProgress(q.id, pct.value); route(); });
   pct.addEventListener('input', () => { $app.querySelector('.big').textContent = pct.value + '%'; $app.querySelector('.bar > div').style.width = pct.value + '%'; });
@@ -1285,8 +1298,15 @@ function freshApp() {
   $app = n;
 }
 const _route = route;
-route = function () { freshApp(); _route(); };
+route = function () {
+  freshApp();
+  _route();
+  const pub = (location.hash || '').startsWith('#/c/');
+  document.documentElement.lang = pub ? document.documentElement.lang : UI();
+  if (!pub && UI() === 'en') { translateDOM($app); translateDOM($tab); }
+};
 window.addEventListener('hashchange', () => route());
+watch(() => UI() === 'en' && !(location.hash || '').startsWith('#/c/'));
 route();
 
 if ('serviceWorker' in navigator) {
