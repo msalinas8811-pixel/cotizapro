@@ -3,6 +3,7 @@ import * as S from './store.js';
 import { parseDictation } from './parser.js';
 import { I } from './icons.js';
 import { shareInvoicePdf } from './pdf.js';
+import { COUNTRIES, US_STATES, countryName, stateCode } from './geo.js';
 
 let $app = document.getElementById('app');
 const $tab = document.getElementById('tabbar');
@@ -84,7 +85,7 @@ function quoteRow(q, href) {
 /* ---------- Link para el cliente ---------- */
 function bizInfo(full) {
   const s = S.settings();
-  const b = { n: s.bizName, p: s.phone, e: s.email, st: s.state, owner: s.owner, addr: [s.address, s.city].filter(Boolean).join(', '),
+  const b = { n: s.bizName, p: s.phone, e: s.email, st: [s.state, (s.country || 'US') !== 'US' ? countryName(s.country) : ''].filter(Boolean).join(', '), owner: s.owner, addr: [s.address, s.city, s.state, (s.country || 'US') !== 'US' ? countryName(s.country) : ''].filter(Boolean).join(', '),
     web: s.website, lic: s.license, ins: !!s.insured, warranty: s.warranty, logo: s.logo && s.logo.length < 24000 ? s.logo : '' };
   if (full) Object.assign(b, { years: s.years, about: s.about, hours: s.hours, services: (s.services || '').split(',').map((x) => x.trim()).filter(Boolean) });
   return b;
@@ -167,6 +168,26 @@ function openShare(q, kind) {
   });
 }
 
+
+/* ---------- País y estado ---------- */
+function stateFieldHTML(country, state) {
+  if (country === 'US') {
+    const code = stateCode(state);
+    return `<label for="st">Estado</label><select id="st"><option value="">Elige el estado…</option>${US_STATES.map(([c, n]) => `<option value="${c}" ${c === code ? 'selected' : ''}>${n} (${c})</option>`).join('')}</select>`;
+  }
+  return `<label for="st">Estado / departamento / provincia</label><input id="st" value="${esc(stateCode(state) ? '' : state)}" placeholder="Opcional">`;
+}
+function locationHTML(s) {
+  const country = s.country || 'US';
+  return `<div class="field"><label for="co">País</label><select id="co">${COUNTRIES.map(([c, n]) => `<option value="${c}" ${c === country ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+    <div class="field" id="stwrap">${stateFieldHTML(country, s.state)}</div>`;
+}
+function bindLocation() {
+  const co = $app.querySelector('#co');
+  co.addEventListener('change', () => { $app.querySelector('#stwrap').innerHTML = stateFieldHTML(co.value, ''); });
+}
+const readLocation = () => ({ country: $app.querySelector('#co').value, state: $app.querySelector('#st').value.trim() });
+
 /* ================= PANTALLAS ================= */
 
 function viewWelcome() {
@@ -204,10 +225,8 @@ function viewRegister() {
         <div class="field"><label for="biz">Nombre del negocio</label><input id="biz" required placeholder="Ej. Carlos Painting LLC" value="${esc(s.bizName)}"></div>
         <div class="field"><span class="flabel">¿A qué te dedicas?</span>
           <div class="pills">${trades.map((t) => `<button type="button" class="pill" data-trade="${t}" aria-pressed="${t === regTrade}">${t}</button>`).join('')}</div></div>
-        <div class="grid2">
-          <div class="field"><label for="st">Estado</label><input id="st" placeholder="Ej. Texas" value="${esc(s.state)}"></div>
-          <div class="field"><label for="ph">Teléfono</label><input id="ph" type="tel" placeholder="(555) 000-0000" value="${esc(s.phone)}"></div>
-        </div>
+        ${locationHTML(s)}
+        <div class="field"><label for="ph">Teléfono / WhatsApp</label><input id="ph" type="tel" placeholder="(555) 000-0000" value="${esc(s.phone)}"></div>
         <div class="field"><label for="em">Correo</label><input id="em" type="email" placeholder="tu@correo.com" value="${esc(s.email)}"></div>
         <button class="btn primary" type="submit" style="margin-top:8px">Continuar</button>
       </form>`;
@@ -215,9 +234,10 @@ function viewRegister() {
       regTrade = b.dataset.trade;
       $app.querySelectorAll('[data-trade]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     }));
+    bindLocation();
     $app.querySelector('#f').addEventListener('submit', (e) => {
       e.preventDefault();
-      S.updateSettings({ bizName: biz.value.trim(), trade: regTrade, state: st.value.trim(), phone: ph.value.trim(), email: em.value.trim() });
+      S.updateSettings({ bizName: biz.value.trim(), trade: regTrade, ...readLocation(), phone: ph.value.trim(), email: em.value.trim() });
       regStep = 2; route();
     });
   } else {
@@ -572,15 +592,13 @@ function viewSettings() {
       <div class="card g">
         <span class="label">Negocio</span>
         <div class="field"><label for="biz">Nombre</label><input id="biz" value="${esc(s.bizName)}"></div>
-        <div class="grid2">
-          <div class="field"><label for="st">Estado</label><input id="st" value="${esc(s.state)}"></div>
-          <div class="field"><label for="ph">Teléfono</label><input id="ph" type="tel" value="${esc(s.phone)}"></div>
-        </div>
+        ${locationHTML(s)}
+        <div class="field"><label for="ph">Teléfono / WhatsApp</label><input id="ph" type="tel" value="${esc(s.phone)}"></div>
         <div class="field"><label for="em">Correo</label><input id="em" type="email" value="${esc(s.email)}"></div>
         <div class="field"><label for="ow">Dueño / responsable</label><input id="ow" value="${esc(s.owner)}" placeholder="Ej. Carlos Martínez"></div>
         <div class="field"><label for="ad">Dirección</label><input id="ad" value="${esc(s.address)}" placeholder="Ej. 4520 Main St"></div>
         <div class="grid2">
-          <div class="field"><label for="cy">Ciudad y ZIP</label><input id="cy" value="${esc(s.city)}" placeholder="Houston, TX 77002"></div>
+          <div class="field"><label for="cy">Ciudad y código postal</label><input id="cy" value="${esc(s.city)}" placeholder="Ej. Houston 77002"></div>
           <div class="field"><label for="yr">Años de experiencia</label><input id="yr" type="number" min="0" value="${esc(s.years)}"></div>
         </div>
         <div class="field"><label for="wb">Sitio web o redes</label><input id="wb" value="${esc(s.website)}" placeholder="www.minegocio.com"></div>
@@ -621,6 +639,7 @@ function viewSettings() {
       <button class="btn danger" id="reset">Borrar todos los datos</button>
     </div>`;
   bindLogo($app.querySelector('#logo'), $app.querySelector('#lp'));
+  bindLocation();
   let lang = s.clientLang;
   $app.querySelectorAll('[data-lang]').forEach((b) => b.onclick = () => {
     lang = b.dataset.lang;
@@ -629,7 +648,7 @@ function viewSettings() {
   sf.addEventListener('submit', (e) => {
     e.preventDefault();
     S.updateSettings({
-      bizName: biz.value.trim(), state: st.value.trim(), phone: ph.value.trim(), email: em.value.trim(),
+      bizName: biz.value.trim(), ...readLocation(), phone: ph.value.trim(), email: em.value.trim(),
       taxRate: Number(tax.value) || 0, depositPct: Number(dep.value) || 0, validDays: Number(vd.value) || 30,
       clientLang: lang, terms: terms.value.trim(), paymentLink: pay.value.trim(), aiEndpoint: ai.value.trim(),
       owner: ow.value.trim(), address: ad.value.trim(), city: cy.value.trim(), years: yr.value.trim(), website: wb.value.trim(),

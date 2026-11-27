@@ -6,6 +6,7 @@ const defaults = () => ({
   settings: {
     bizName: '',
     trade: 'Pintura',
+    country: 'US',
     state: '',
     phone: '',
     email: '',

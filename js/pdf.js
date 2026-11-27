@@ -1,5 +1,6 @@
 // CotizaPro — factura en PDF (archivo real) para enviar al cliente por WhatsApp o correo
 import * as S from './store.js';
+import { countryName } from './geo.js';
 
 let jsPDFPromise = null;
 function loadJsPDF() {
@@ -56,7 +57,7 @@ export async function buildInvoicePdf(q) {
   doc.setTextColor(...ink); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
   doc.text(clean(s.bizName || ''), x, y + 14);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...muted);
-  const bizLines = [s.owner, [s.address, s.city].filter(Boolean).join(', '), [s.phone, s.email].filter(Boolean).join('  |  '), s.website,
+  const bizLines = [s.owner, [s.address, s.city, s.state, (s.country || 'US') !== 'US' ? countryName(s.country) : ''].filter(Boolean).join(', '), [s.phone, s.email].filter(Boolean).join('  |  '), s.website,
     [s.license ? (L === 'es' ? 'Licencia #' : 'License #') + s.license : '', s.insured ? (L === 'es' ? 'Asegurado' : 'Insured') : ''].filter(Boolean).join('  |  ')].filter(Boolean);
   bizLines.forEach((l, i) => doc.text(clean(l), x, y + 28 + i * 12));
 
