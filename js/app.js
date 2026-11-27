@@ -783,6 +783,22 @@ function startDictation(textarea, statusEl, btn) {
   return r;
 }
 
+const DUR_UNITS = [['days', 'días', 'day', 'día'], ['weeks', 'semanas', 'week', 'semana'], ['hours', 'horas', 'hour', 'hora']];
+function parseDuration(txt) {
+  const m = String(txt || '').match(/([\d.,]+)\s*([a-záéíóú]+)/i);
+  if (!m) return { n: '', u: 'days' };
+  const w = m[2].toLowerCase();
+  const u = (DUR_UNITS.find((x) => x.some((y) => w.startsWith(y.slice(0, 3)))) || DUR_UNITS[0])[0];
+  return { n: m[1].replace(',', '.'), u };
+}
+function formatDuration(n, u, lang) {
+  const v = Number(n);
+  if (!v) return '';
+  const x = DUR_UNITS.find((d) => d[0] === u) || DUR_UNITS[0];
+  const word = lang === 'es' ? (v === 1 ? x[3] : x[1]) : (v === 1 ? x[2] : x[0]);
+  return `${v} ${word}`;
+}
+
 function viewQuoteForm(arg, extra) {
   setTabs(null);
   const s = S.settings();
@@ -792,6 +808,7 @@ function viewQuoteForm(arg, extra) {
   const c = S.getClient(q.clientId) || { name: '', phone: '', email: '', address: '' };
   const services = (s.services || '').split(',').map((x) => x.trim()).filter(Boolean);
   const validDays = editing ? Math.max(1, Math.round((q.validUntil - q.createdAt) / 86400000)) : s.validDays;
+  const { n: durN, u: durU } = parseDuration(q.duration);
   $app.innerHTML = `
     ${topbar(editing ? 'Editar cotización #' + q.number : 'Cotizar servicio', editing ? '#/doc/' + q.id : '#/profile')}
     <form id="qf" class="list" style="gap:14px" novalidate>
@@ -815,7 +832,7 @@ function viewQuoteForm(arg, extra) {
           <textarea id="scope" placeholder="Ej. Paint 3 bedrooms, walls and trim, 2 coats. Patch cracks before painting. Move and cover furniture.">${esc(q.scope || q.transcript || '')}</textarea>
           <div class="row" style="justify-content:flex-start;gap:10px">
             <button type="button" class="icon-btn" id="dict" aria-label="Dictar con voz">${I.mic(20)}</button>
-            <button type="button" class="link-btn" id="genit">Generar partidas desde la descripción</button>
+            <button type="button" class="link-btn" id="genit" style="text-align:left">Generar partidas desde la descripción</button>
           </div>
           <span class="small muted" id="dst"></span>
         </div>
@@ -828,18 +845,33 @@ function viewQuoteForm(arg, extra) {
       </div>
 
       <div class="card g">
-        <span class="label">4 · Fechas y condiciones</span>
+        <span class="label">4 · Fechas del trabajo</span>
+        <div class="field"><label for="sd">Fecha de inicio</label><input id="sd" type="date" value="${esc(q.startDate)}"></div>
+        <div class="field"><label for="dun">Duración estimada</label>
+          <div class="row" style="gap:10px">
+            <input id="dun" type="number" min="0" step="0.5" inputmode="decimal" placeholder="Ej. 3" value="${durN}" style="flex:1">
+            <label for="duu" class="vh">Unidad</label>
+            <select id="duu" style="flex:1.3">${DUR_UNITS.map(([k, es]) => `<option value="${k}" ${k === durU ? 'selected' : ''}>${es}</option>`).join('')}</select>
+          </div></div>
+        <div class="field"><label for="vd">La cotización es válida por</label>
+          <select id="vd">${[7, 15, 30, 45, 60, 90].map((d) => `<option value="${d}" ${d === Number(validDays) ? 'selected' : ''}>${d} días</option>`).join('')}${[7, 15, 30, 45, 60, 90].includes(Number(validDays)) ? '' : `<option value="${validDays}" selected>${validDays} días</option>`}</select></div>
+      </div>
+
+      <div class="card g">
+        <span class="label">5 · Pago y condiciones</span>
         <div class="grid2">
-          <div class="field"><label for="sd">Fecha de inicio</label><input id="sd" type="date" value="${esc(q.startDate)}"></div>
-          <div class="field"><label for="du">Duración estimada</label><input id="du" value="${esc(q.duration)}" placeholder="Ej. 3 days"></div>
+          <div class="field"><label for="tax">Impuesto</label>
+            <div class="suffix"><input id="tax" type="number" step="0.01" min="0" inputmode="decimal" value="${q.taxRate}"><span>%</span></div></div>
+          <div class="field"><label for="dep">Anticipo</label>
+            <div class="suffix"><input id="dep" type="number" min="0" max="100" inputmode="numeric" value="${q.depositPct}"><span>%</span></div></div>
         </div>
-        <div class="grid2">
-          <div class="field"><label for="tax">Impuesto %</label><input id="tax" type="number" step="0.01" min="0" value="${q.taxRate}"></div>
-          <div class="field"><label for="dep">Anticipo %</label><input id="dep" type="number" min="0" max="100" value="${q.depositPct}"></div>
-        </div>
-        <div class="field"><label for="vd">Válida por (días)</label><input id="vd" type="number" min="1" value="${validDays}"></div>
-        <div class="field"><label for="ex">No incluye (opcional)</label><input id="ex" value="${esc(q.exclusions)}" placeholder="Ej. Wallpaper removal, furniture moving"></div>
-        <div class="sep"></div>
+        <div class="field"><label for="ex">No incluye (opcional)</label>
+          <textarea id="ex" rows="2" style="min-height:70px" placeholder="Ej. Wallpaper removal, furniture moving">${esc(q.exclusions)}</textarea></div>
+        <span class="small muted">Las condiciones de pago y la garantía salen de tu perfil.</span>
+      </div>
+
+      <div class="card g">
+        <span class="label v">Resumen</span>
         <div id="tot"></div>
       </div>
 
@@ -894,7 +926,7 @@ function viewQuoteForm(arg, extra) {
     client = S.upsertClient({ ...(client ? { id: client.id } : {}), name, phone: cp.value.trim(), email: ce.value.trim(), address: ca.value.trim() });
     const data = {
       clientId: client.id, title: ttl.value.trim(), jobAddress: job.value.trim(), scope: scope.value.trim(), items: t.items,
-      startDate: sd.value, duration: du.value.trim(), taxRate: t.taxRate, depositPct: t.depositPct, exclusions: ex.value.trim()
+      startDate: sd.value, duration: formatDuration(dun.value, duu.value, s.clientLang), taxRate: t.taxRate, depositPct: t.depositPct, exclusions: ex.value.trim()
     };
     let saved;
     if (editing) {

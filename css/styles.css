@@ -1,5 +1,6 @@
 /* CotizaPro — estilo glassmorphism */
 :root {
+  color-scheme: dark;
   --bg: #0A0F1F;
   --cyan: #67E8F9;
   --cyan-soft: #A5F3FC;
@@ -124,7 +125,15 @@ input, textarea, select {
   font: 15px Inter, sans-serif; outline: none;
 }
 textarea { padding: 12px 14px; min-height: 96px; resize: vertical; line-height: 1.45; }
-select option { color: #111; }
+select option { background: #161c33; color: #fff; }
+input[type="date"] { min-width: 0; -webkit-appearance: none; appearance: none; display: flex; align-items: center; }
+input[type="date"]::-webkit-calendar-picker-indicator { margin-left: auto; opacity: 0.9; cursor: pointer; }
+.grid2 > .field { justify-content: flex-end; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+select { -webkit-appearance: none; appearance: none; padding-right: 38px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; }
+.suffix { position: relative; }
+.suffix input { padding-right: 34px; }
+.suffix span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 600; pointer-events: none; }
 input:focus, textarea:focus, select:focus { border-color: var(--cyan); }
 input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.55); }
 input[type="checkbox"] { width: 24px; height: 24px; min-height: 0; accent-color: var(--cyan); flex-shrink: 0; }
