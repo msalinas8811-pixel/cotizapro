@@ -1,0 +1,8 @@
+name = "cotizapro-ai"
+main = "index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+# Pon aquí la dirección donde publiques la app, por ejemplo:
+# ALLOWED_ORIGIN = "https://msalinas8811-pixel.github.io"
+ALLOWED_ORIGIN = "*"
