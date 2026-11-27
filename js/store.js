@@ -16,11 +16,24 @@ const defaults = () => ({
     terms: 'Price includes labor and materials listed. Any additional work will be quoted separately. Balance due upon completion.',
     paymentLink: '',     // Link de pago de Stripe / Square / PayPal del negocio
     aiEndpoint: '',      // URL opcional del Worker de IA
-    logo: ''             // data URL del logo
+    logo: '',            // data URL del logo
+    // Perfil de la empresa
+    owner: '',
+    address: '',
+    city: '',
+    website: '',
+    license: '',
+    insured: true,
+    years: '',
+    about: '',
+    services: 'Interior painting, Exterior painting, Cabinet painting, Drywall repair, Pressure washing',
+    warranty: '2-year warranty on workmanship.',
+    hours: 'Mon–Sat 7:00 am – 6:00 pm'
   },
   clients: [],
   quotes: [],
-  nextNumber: 1001
+  nextNumber: 1001,
+  nextWO: 2001
 });
 
 let db = load();
@@ -98,6 +111,12 @@ export function newQuote(partial = {}) {
     payments: [],
     history: [{ t: Date.now(), text: 'Cotización creada' }],
     reminders: true,
+    jobAddress: '',
+    scope: '',
+    startDate: '',
+    duration: '',
+    exclusions: '',
+    wo: null,
     ...partial
   };
   db.quotes.unshift(q);
@@ -127,6 +146,81 @@ export function addPayment(id, amount, method) {
   q.status = t.balance <= 0.005 ? 'paid' : 'invoiced';
   q.history.push({ t: Date.now(), text: `Pago recibido ${money(amount)} (${method})` });
   save();
+}
+
+/* ---------- Orden de trabajo y seguimiento ---------- */
+export const STAGES = [
+  'Orden de trabajo creada',
+  'Visita y medidas',
+  'Materiales comprados',
+  'Trabajo en progreso',
+  'Revisión final con el cliente',
+  'Trabajo terminado'
+];
+
+export function createWorkOrder(id, signature, via) {
+  const q = getQuote(id);
+  if (!q) return null;
+  if (!q.wo) {
+    q.wo = {
+      number: db.nextWO++,
+      createdAt: Date.now(),
+      progress: 0,
+      stages: STAGES.map((label, i) => ({ label, done: i === 0, t: i === 0 ? Date.now() : null })),
+      updates: [{ t: Date.now(), text: 'Orden de trabajo creada. Pronto te contactamos para programar.', pct: 0 }]
+    };
+    q.history.push({ t: Date.now(), text: `Orden de trabajo #${q.wo.number} creada` });
+  }
+  if (!['invoiced', 'paid'].includes(q.status)) q.status = 'approved';
+  q.signature = signature || q.signature;
+  q.approvedAt = q.approvedAt || Date.now();
+  q.history.push({ t: Date.now(), text: `Aprobada${signature ? ' y firmada por ' + signature : ''}${via ? ' (' + via + ')' : ''}` });
+  save();
+  return q;
+}
+
+export function setStage(id, idx, done) {
+  const q = getQuote(id);
+  if (!q?.wo) return;
+  const st = q.wo.stages[idx];
+  st.done = done;
+  st.t = done ? Date.now() : null;
+  const auto = Math.round((q.wo.stages.filter((x) => x.done).length - 1) / (q.wo.stages.length - 1) * 100);
+  if (done && auto > q.wo.progress) q.wo.progress = auto;
+  if (done && idx === q.wo.stages.length - 1) q.wo.progress = 100;
+  if (done) q.wo.updates.push({ t: Date.now(), text: st.label, pct: q.wo.progress });
+  if (q.wo.progress >= 100 && !q.completedAt) q.completedAt = Date.now();
+  save();
+}
+
+export function setProgress(id, pct) {
+  const q = getQuote(id);
+  if (!q?.wo) return;
+  q.wo.progress = Math.max(0, Math.min(100, Number(pct) || 0));
+  if (q.wo.progress >= 100 && !q.completedAt) q.completedAt = Date.now();
+  save();
+}
+
+export function addUpdate(id, text) {
+  const q = getQuote(id);
+  if (!q?.wo || !text.trim()) return;
+  q.wo.updates.push({ t: Date.now(), text: text.trim(), pct: q.wo.progress });
+  q.history.push({ t: Date.now(), text: 'Avance de obra registrado' });
+  save();
+}
+
+// Convierte la cotización aprobada en factura (con vencimiento a 7 días)
+export function ensureInvoice(id) {
+  const q = getQuote(id);
+  if (!q) return null;
+  if (!q.invoicedAt) {
+    q.invoicedAt = Date.now();
+    q.dueDate = Date.now() + 7 * 86400000;
+    q.history.push({ t: Date.now(), text: 'Factura creada' });
+  }
+  if (q.status === 'approved' || q.status === 'draft' || q.status === 'sent') q.status = totals(q).balance <= 0.005 ? 'paid' : 'invoiced';
+  save();
+  return q;
 }
 
 /* ---------- Cálculos ---------- */

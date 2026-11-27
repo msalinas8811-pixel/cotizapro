@@ -4,7 +4,17 @@
 
 App (PWA) de cotizaciones y facturas para oficios en EE.UU.: pintores, limpieza, jardinería, handyman y remodelación. El trabajador dicta el trabajo en español y la app arma una cotización profesional en inglés que el cliente abre desde un link, firma y paga.
 
-## Qué hace
+## Flujo completo
+
+1. **Perfil de la empresa**: nombre, logo, dueño, dirección, teléfono, correo, sitio web, licencia, seguro, años de experiencia, servicios, garantía y horario. Se puede compartir con clientes.
+2. **Cotizar servicio**: formulario con datos del cliente, tipo de servicio, lugar del trabajo, alcance (escrito o dictado por voz), partidas con precios, fecha de inicio, duración, impuesto, anticipo y lo que no incluye.
+3. **Formato profesional de cotización**: datos de la empresa y del cliente, alcance, tabla de partidas, totales, anticipo, condiciones de pago, garantía y aceptación. Se ve en inglés o español.
+4. **Link por WhatsApp**: el cliente abre la cotización, firma con su nombre y toca *Aprobar*.
+5. **Orden de trabajo**: la aprobación llega por WhatsApp con un link. Al tocarlo en el teléfono del negocio, la orden se crea sola.
+6. **Seguimiento de la obra**: etapas (visita, materiales, en progreso, revisión, terminado), porcentaje de avance y notas. El cliente recibe un link de seguimiento por WhatsApp cada vez que hay un avance.
+7. **Factura final en PDF**: al terminar el trabajo se genera la factura en PDF (archivo real) con datos de la empresa, del cliente, partidas, pagos recibidos y saldo, lista para mandarla por WhatsApp o correo. Si está pagada, lleva el sello *PAID / PAGADA*.
+
+## Funciones
 
 - **Cotización por voz**: dictado en español desde el micrófono del teléfono. El texto se convierte en partidas con precios sugeridos que se pueden editar.
 - **Partidas en dos idiomas**: el cliente las ve en inglés y el trabajador tiene la versión en español.
@@ -23,6 +33,8 @@ js/app.js               Pantallas y navegación
 js/store.js             Datos (localStorage), cálculos y links para el cliente
 js/parser.js            Dictado en español → partidas en inglés (con IA opcional)
 js/icons.js             Íconos
+js/pdf.js               Factura en PDF
+js/vendor/              jsPDF (licencia MIT) para generar los PDF sin internet
 manifest.webmanifest    Datos de instalación (PWA)
 sw.js                   Service worker (modo sin internet)
 icons/                  Íconos de la app
@@ -67,7 +79,9 @@ Después pega la dirección del Worker en **Ajustes → Servidor de IA**. La cla
 ## Límites de esta versión (MVP)
 
 - Los datos viven en el teléfono, sin cuentas ni sincronización entre dispositivos.
-- La cotización viaja dentro del link. Cuando el cliente aprueba, avisa por WhatsApp y el trabajador marca la cotización como aprobada en la app.
+- La cotización y el seguimiento viajan dentro del link. La aprobación del cliente llega por WhatsApp y la orden se crea al abrir ese link en el teléfono donde se hizo la cotización. Con un backend, esto pasaría solo y en cualquier dispositivo.
+- El alcance del trabajo se muestra tal como se escribe: si el cliente habla inglés, escríbelo en inglés o usa el servidor de IA.
+- El seguimiento todavía no lleva fotos (necesitan un servidor para guardarse).
 - Los cobros usan el link de pago del propio negocio (Stripe, Square o PayPal). Más adelante se puede integrar Stripe Connect.
 - El Plan Pro ($12 al mes) se muestra en la app pero todavía no cobra. En Play Store, la suscripción a la app tendrá que cobrarse con Google Play Billing.
 

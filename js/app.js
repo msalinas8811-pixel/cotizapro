@@ -2,6 +2,7 @@
 import * as S from './store.js';
 import { parseDictation } from './parser.js';
 import { I } from './icons.js';
+import { shareInvoicePdf } from './pdf.js';
 
 let $app = document.getElementById('app');
 const $tab = document.getElementById('tabbar');
@@ -36,7 +37,14 @@ function statusOf(q) {
   if (q.status === 'invoiced' && q.dueDate && Date.now() > q.dueDate && S.totals(q).balance > 0) return 'overdue';
   return q.status;
 }
-const chip = (q) => { const [t, c] = STATUS[statusOf(q)] || STATUS.draft; return `<span class="chip ${c}">${t}</span>`; };
+const chip = (q) => {
+  if (q.wo && q.status !== 'paid' && statusOf(q) !== 'overdue') {
+    return q.wo.progress >= 100 ? '<span class="chip green">Obra terminada</span>' : `<span class="chip cyan">En obra · ${q.wo.progress}%</span>`;
+  }
+  const [t, c] = STATUS[statusOf(q)] || STATUS.draft;
+  return `<span class="chip ${c}">${t}</span>`;
+};
+const hrefFor = (q) => (q.wo ? '#/wo/' + q.id : ['invoiced', 'paid'].includes(q.status) ? '#/invoice/' + q.id : '#/doc/' + q.id);
 
 function topbar(title, back = '#/home', right = '<div class="ghost"></div>') {
   return `<div class="topbar">
@@ -53,9 +61,9 @@ function setTabs(active) {
   $tab.innerHTML =
     t('home', '#/home', 'Inicio', I.home) +
     t('clients', '#/clients', 'Clientes', I.users) +
-    t('new', '#/new', 'Nueva cotización', I.plus, 'add') +
-    t('invoices', '#/invoices', 'Facturas', I.file) +
-    t('settings', '#/settings', 'Ajustes', I.gear);
+    t('new', '#/quote-form', 'Cotizar servicio', I.plus, 'add') +
+    t('works', '#/works', 'Obras y cotizaciones', I.file) +
+    t('profile', '#/profile', 'Perfil de la empresa', I.building);
 }
 
 const clientName = (q) => S.getClient(q.clientId)?.name || 'Sin cliente';
@@ -63,7 +71,7 @@ const clientName = (q) => S.getClient(q.clientId)?.name || 'Sin cliente';
 function quoteRow(q, href) {
   const t = S.totals(q);
   const amount = ['invoiced', 'approved'].includes(q.status) && t.paid ? t.balance : t.total;
-  return `<a class="item g" href="${href || '#/q/' + q.id}">
+  return `<a class="item g" href="${href || hrefFor(q)}">
     <div class="col" style="flex-grow:1">
       <span style="font-size:15px;font-weight:600">${esc(clientName(q))}</span>
       <span class="small muted">${esc(q.title || 'Cotización')} · #${q.number}</span>
@@ -74,25 +82,35 @@ function quoteRow(q, href) {
 }
 
 /* ---------- Link para el cliente ---------- */
+function bizInfo(full) {
+  const s = S.settings();
+  const b = { n: s.bizName, p: s.phone, e: s.email, st: s.state, owner: s.owner, addr: [s.address, s.city].filter(Boolean).join(', '),
+    web: s.website, lic: s.license, ins: !!s.insured, warranty: s.warranty, logo: s.logo && s.logo.length < 24000 ? s.logo : '' };
+  if (full) Object.assign(b, { years: s.years, about: s.about, hours: s.hours, services: (s.services || '').split(',').map((x) => x.trim()).filter(Boolean) });
+  return b;
+}
+const appBase = () => location.href.split('#')[0];
+
 function sharePayload(q, kind) {
   const s = S.settings();
   const c = S.getClient(q.clientId);
   const t = S.totals(q);
   return {
-    v: 1,
+    v: 2,
     kind, // estimate | invoice
-    b: { n: s.bizName, p: s.phone, e: s.email, st: s.state, logo: s.logo && s.logo.length < 24000 ? s.logo : '' },
+    base: appBase(),
+    b: bizInfo(false),
     q: {
-      n: q.number, title: q.title, client: c?.name || '', addr: c?.address || '',
+      id: q.id, n: q.number, title: q.title, client: c?.name || '', addr: c?.address || '', cphone: c?.phone || '', cemail: c?.email || '',
+      job: q.jobAddress || c?.address || '', scope: q.scope, start: q.startDate, dur: q.duration, excl: q.exclusions,
       items: q.items.map((i) => ({ en: i.en, es: i.es, note: i.note, qty: Number(i.qty), price: Number(i.price) })),
       tax: Number(q.taxRate), dep: Number(q.depositPct), valid: q.validUntil, created: q.createdAt,
-      paid: t.paid, due: q.dueDate || null, terms: s.terms, pay: s.paymentLink, lang: s.clientLang
+      paid: t.paid, due: q.dueDate || null, terms: s.terms, pay: s.paymentLink, lang: s.clientLang, wo: q.wo?.number || null
     }
   };
 }
 function shareUrl(q, kind = 'estimate') {
-  const base = location.href.split('#')[0];
-  return `${base}#/c/${S.encodeShare(sharePayload(q, kind))}`;
+  return `${appBase()}#/c/${S.encodeShare(sharePayload(q, kind))}`;
 }
 
 function shareMessage(q, kind) {
@@ -267,18 +285,18 @@ function viewHome() {
   $app.innerHTML = `
     <div class="row">
       <div class="col"><span class="muted" style="font-size:14px">Hola</span><span class="display" style="font-size:24px;font-weight:700">${esc(s.bizName || 'Mi negocio')}</span></div>
-      <a class="icon-btn" href="#/settings" aria-label="Ajustes del negocio" style="overflow:hidden;font-family:'Space Grotesk';font-weight:700">${s.logo ? `<img class="logo-img" src="${esc(s.logo)}" alt="">` : initials(s.bizName)}</a>
+      <a class="icon-btn" href="#/profile" aria-label="Perfil de la empresa" style="overflow:hidden;font-family:'Space Grotesk';font-weight:700">${s.logo ? `<img class="logo-img" src="${esc(s.logo)}" alt="">` : initials(s.bizName)}</a>
     </div>
     <div class="grid2">
       <div class="card g"><span class="small muted">Por cobrar</span><span class="big">${S.money(owed)}</span><span class="small" style="color:var(--orange)">${owedN} pendiente${owedN === 1 ? '' : 's'}</span></div>
       <div class="card g"><span class="small muted">Cobrado en ${month}</span><span class="big">${S.money(paidMonth)}</span><span class="small" style="color:var(--green)">${qs.filter((q) => q.status === 'paid').length} pagadas</span></div>
     </div>
-    <a href="#/new" class="item g" style="padding:18px;gap:14px;background:linear-gradient(135deg,rgba(34,211,238,0.30),rgba(167,139,250,0.30))">
+    <a href="#/quote-form" class="item g" style="padding:18px;gap:14px;background:linear-gradient(135deg,rgba(34,211,238,0.30),rgba(167,139,250,0.30))">
       <span style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;flex-shrink:0">${I.mic(26, '#0A0F1F')}</span>
-      <span class="col"><span class="display" style="font-size:18px;font-weight:700">Nueva cotización</span><span style="font-size:13px;color:rgba(255,255,255,0.84)">Dicta el trabajo en español</span></span>
+      <span class="col"><span class="display" style="font-size:18px;font-weight:700">Cotizar servicio</span><span style="font-size:13px;color:rgba(255,255,255,0.84)">Formulario o dictado por voz</span></span>
     </a>
-    <div class="row"><h2>Pendientes</h2><a href="#/invoices" style="font-size:13px">Ver todo</a></div>
-    <div class="list">${pending.length ? pending.map((q) => quoteRow(q, ['approved', 'invoiced'].includes(q.status) ? '#/invoice/' + q.id : null)).join('') : `<div class="empty g card">Aún no tienes cotizaciones.<br>Toca <b>Nueva cotización</b> y dicta tu primer trabajo.</div>`}</div>`;
+    <div class="row"><h2>Pendientes</h2><a href="#/works" style="font-size:13px">Ver todo</a></div>
+    <div class="list">${pending.length ? pending.map((q) => quoteRow(q)).join('') : `<div class="empty g card">Aún no tienes cotizaciones.<br>Toca <b>Nueva cotización</b> y dicta tu primer trabajo.</div>`}</div>`;
 }
 
 let rec = null;
@@ -345,103 +363,11 @@ function viewNew() {
     const q = S.newQuote({ clientId: c?.id || null, title: r.title || '', items: r.items, transcript: text });
     draftText = '';
     toast(r.source === 'ai' ? 'Cotización generada con IA' : 'Borrador listo: revisa precios');
-    go('#/q/' + q.id);
+    go('#/quote-form/' + q.id);
   });
   $app.querySelector('#manual').addEventListener('click', () => {
-    const q = S.newQuote({ items: [{ en: '', es: '', note: '', qty: 1, price: 0 }] });
-    go('#/q/' + q.id);
+    go('#/quote-form');
   });
-}
-
-function viewQuote(id) {
-  const q = S.getQuote(id);
-  if (!q) return go('#/home');
-  setTabs(null);
-  const t = S.totals(q);
-  const cl = S.clients();
-  $app.innerHTML = `
-    ${topbar('Cotización #' + q.number, '#/home', `<button class="icon-btn" id="del" aria-label="Eliminar cotización">${I.trash}</button>`)}
-    <div class="row">${chip(q)}<span class="small muted">Creada ${S.dateEs(q.createdAt)}</span></div>
-    <div class="card g">
-      <div class="field"><label for="cli">Cliente</label>
-        <select id="cli"><option value="">Elegir cliente…</option>${cl.map((c) => `<option value="${c.id}" ${c.id === q.clientId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}<option value="__new">+ Nuevo cliente</option></select></div>
-      <div id="newcli" class="grid2" hidden>
-        <div class="field"><label for="ncn">Nombre</label><input id="ncn" placeholder="Nombre"></div>
-        <div class="field"><label for="ncp">Teléfono</label><input id="ncp" type="tel" placeholder="(555) 000-0000"></div>
-      </div>
-      <div class="field"><label for="ttl">Trabajo</label><input id="ttl" placeholder="Ej. Interior painting" value="${esc(q.title)}"></div>
-    </div>
-    ${q.transcript ? `<div class="card g"><span class="label">Lo que dijiste</span><p style="font-size:14px;line-height:1.45">“${esc(q.transcript)}”</p></div>` : ''}
-    <div class="row"><span class="label v">Partidas · en inglés para el cliente</span></div>
-    <div class="list" id="lines">${q.items.map((it, i) => lineHTML(it, i)).join('')}</div>
-    <button class="btn secondary" id="add">${I.plus} Agregar partida</button>
-    <div class="card g">
-      <div class="grid2">
-        <div class="field"><label for="tax">Impuesto %</label><input id="tax" type="number" step="0.01" min="0" value="${q.taxRate}"></div>
-        <div class="field"><label for="dep">Anticipo %</label><input id="dep" type="number" min="0" max="100" value="${q.depositPct}"></div>
-      </div>
-      <div class="sep"></div>
-      <div id="tot">${totalsHTML(q)}</div>
-    </div>
-    <div class="list no-print">
-      <button class="btn primary" id="send">${I.send} Enviar al cliente</button>
-      <a class="btn secondary" href="${esc(shareUrl(q))}" id="prev">${I.eye} Ver como el cliente</a>
-      ${q.status === 'draft' || q.status === 'sent' ? `<button class="btn secondary" id="appr">${I.check} Marcar como aprobada</button>` : ''}
-      ${['approved', 'invoiced', 'paid'].includes(q.status) ? `<a class="btn green" href="#/invoice/${q.id}">${I.card} ${q.status === 'approved' ? 'Ir a factura y cobro' : 'Ver factura'}</a>` : ''}
-    </div>
-    ${historyHTML(q)}`;
-
-  const save = () => {
-    const items = [...$app.querySelectorAll('.line')].map((el) => ({
-      en: el.querySelector('[data-f=en]').value,
-      es: el.querySelector('[data-f=es]').value,
-      note: el.querySelector('[data-f=note]').value,
-      qty: Number(el.querySelector('[data-f=qty]').value) || 0,
-      price: Number(el.querySelector('[data-f=price]').value) || 0
-    }));
-    S.updateQuote(q.id, { items, title: ttl.value, taxRate: Number(tax.value) || 0, depositPct: Number(dep.value) || 0 });
-    $app.querySelector('#tot').innerHTML = totalsHTML(q);
-    $app.querySelector('#prev').href = shareUrl(q);
-  };
-  $app.addEventListener('input', (e) => { if (e.target.matches('#lines input, #ttl, #tax, #dep')) save(); });
-  $app.querySelector('#lines').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-rm]');
-    if (!b) return;
-    b.closest('.line').remove();
-    save();
-  });
-  add.onclick = () => {
-    $app.querySelector('#lines').insertAdjacentHTML('beforeend', lineHTML({ en: '', es: '', note: '', qty: 1, price: 0 }, q.items.length));
-    save();
-    $app.querySelector('#lines .line:last-child [data-f=en]').focus();
-  };
-  cli.onchange = () => {
-    if (cli.value === '__new') { newcli.hidden = false; ncn.focus(); return; }
-    newcli.hidden = true;
-    S.updateQuote(q.id, { clientId: cli.value || null });
-  };
-  const addCli = () => {
-    if (!ncn.value.trim()) return;
-    const c = S.upsertClient({ name: ncn.value.trim(), phone: ncp.value.trim(), email: '', address: '' });
-    S.updateQuote(q.id, { clientId: c.id });
-  };
-  ncn.onchange = addCli;
-  ncp.onchange = () => { const c = S.getClient(q.clientId); if (c && c.name === ncn.value.trim()) S.upsertClient({ id: c.id, phone: ncp.value.trim() }); else addCli(); };
-  del.onclick = () => { if (confirm('¿Eliminar esta cotización?')) { S.deleteQuote(q.id); go('#/home'); } };
-  send.onclick = () => {
-    save();
-    if (!q.clientId) { toast('Elige un cliente primero'); cli.focus(); return; }
-    if (!q.items.length || t.total === 0 && S.totals(q).total === 0) { toast('Agrega precios a las partidas'); return; }
-    openShare(q, 'estimate');
-  };
-  const ap = $app.querySelector('#appr');
-  if (ap) ap.onclick = () => {
-    const name = prompt('Nombre de quien aprobó (firma):', S.getClient(q.clientId)?.name || '');
-    if (name === null) return;
-    S.updateQuote(q.id, { status: 'approved', signature: name, approvedAt: Date.now() }, `Aprobada y firmada${name ? ' por ' + name : ''}`);
-    toast('Cotización aprobada');
-    go('#/invoice/' + q.id);
-  };
 }
 
 function lineHTML(it, i) {
@@ -475,20 +401,40 @@ function historyHTML(q) {
     ${[...q.history].reverse().slice(0, 8).map((h, i) => `<div class="row" style="justify-content:flex-start"><span class="dot" style="background:${colors[i % 3]}"></span><span style="font-size:14px;flex-grow:1">${esc(h.text)}</span><span class="small muted">${S.dateEs(h.t)}</span></div>`).join('')}</div>`;
 }
 
+async function sendInvoicePdf(q, btn) {
+  S.ensureInvoice(q.id);
+  const s = S.settings();
+  const c = S.getClient(q.clientId);
+  const t = S.totals(q);
+  const first = (c?.name || '').split(' ')[0];
+  const msg = s.clientLang === 'es'
+    ? `Hola ${first}, adjunto la factura #${q.number} de ${s.bizName}. ${t.balance > 0 ? 'Saldo: ' + S.money(t.balance) + '.' : '¡Pagada completa, gracias!'}`
+    : `Hi ${first}, attached is invoice #${q.number} from ${s.bizName}. ${t.balance > 0 ? 'Balance due: ' + S.money(t.balance) + '.' : 'Paid in full, thank you!'}`;
+  const label = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Generando PDF…';
+  try {
+    const r = await shareInvoicePdf(q, msg);
+    if (r !== 'cancelled') {
+      S.updateQuote(q.id, {}, r === 'shared' ? 'Factura PDF enviada al cliente' : 'Factura PDF descargada');
+      toast(r === 'shared' ? 'Factura enviada' : 'PDF descargado: envíalo por WhatsApp');
+    }
+  } catch (e) {
+    toast(e.message || 'No se pudo crear el PDF');
+  }
+  btn.disabled = false; btn.innerHTML = label;
+}
+
 function viewInvoice(id) {
   const q = S.getQuote(id);
   if (!q) return go('#/home');
   setTabs(null);
-  if (q.status === 'approved' && !q.invoicedAt) {
-    // Al aprobar, la cotización pasa a ser factura con vencimiento a 7 días
-    S.updateQuote(q.id, { invoicedAt: Date.now(), dueDate: Date.now() + 7 * 86400000 }, 'Factura creada');
-  }
+  if (q.status === 'approved' && !q.invoicedAt) S.ensureInvoice(q.id);
   const t = S.totals(q);
   const pct = t.total ? Math.min(100, Math.round((t.paid / t.total) * 100)) : 0;
   const c = S.getClient(q.clientId);
   const suggested = t.paid === 0 && t.deposit ? t.deposit : t.balance;
   $app.innerHTML = `
-    ${topbar('Factura #' + q.number, '#/invoices', `<a class="icon-btn" href="#/q/${q.id}" aria-label="Editar cotización">${I.pen}</a>`)}
+    ${topbar('Factura #' + q.number, q.wo ? '#/wo/' + q.id : '#/works', `<a class="icon-btn" href="#/quote-form/${q.id}" aria-label="Editar cotización">${I.pen}</a>`)}
     <div class="card g" style="padding:18px;gap:12px">
       <div class="row"><span style="font-size:15px;font-weight:600">${esc(c?.name || 'Sin cliente')}</span>${q.signature ? `<span class="chip green">${I.check.replace('width="20" height="20"', 'width="12" height="12"')} Aprobada y firmada</span>` : chip(q)}</div>
       <div class="col"><span class="small muted">${t.balance <= 0 ? 'Pagada completa' : 'Saldo pendiente'}</span><span class="huge">${S.money(Math.max(0, t.balance))}</span></div>
@@ -513,7 +459,7 @@ function viewInvoice(id) {
     <div class="list no-print">
       ${t.balance > 0 ? `<button class="btn green" id="sendinv">${I.card} Enviar factura y link de pago</button>
       <button class="btn secondary" id="remind">${I.bell} Enviar recordatorio ahora</button>` : ''}
-      <a class="btn secondary" href="${esc(shareUrl(q, 'invoice'))}/print">${I.print} Descargar PDF</a>
+      <button class="btn ${t.balance > 0 ? 'secondary' : 'green'}" id="invpdf">${I.print} Factura en PDF para el cliente</button>
     </div>`;
   const pf = $app.querySelector('#payf');
   if (pf) pf.addEventListener('submit', (e) => {
@@ -525,6 +471,7 @@ function viewInvoice(id) {
     route();
   });
   rem.onchange = () => S.updateQuote(q.id, { reminders: rem.checked });
+  invpdf.onclick = () => sendInvoicePdf(q, invpdf);
   const si = $app.querySelector('#sendinv');
   if (si) si.onclick = () => {
     if (q.status === 'approved') S.updateQuote(q.id, { status: 'invoiced' });
@@ -541,24 +488,6 @@ function viewInvoice(id) {
     S.updateQuote(q.id, {}, 'Recordatorio enviado');
     route();
   };
-}
-
-let invFilter = 'open';
-function viewInvoices() {
-  setTabs('invoices');
-  const all = S.quotes();
-  const f = {
-    open: (q) => q.status !== 'paid',
-    paid: (q) => q.status === 'paid',
-    all: () => true
-  }[invFilter];
-  const list = all.filter(f);
-  const pill = (k, label) => `<button class="pill" data-f="${k}" aria-pressed="${invFilter === k}">${label}</button>`;
-  $app.innerHTML = `
-    <h1>Cotizaciones y facturas</h1>
-    <div class="pills">${pill('open', 'Pendientes')}${pill('paid', 'Pagadas')}${pill('all', 'Todas')}</div>
-    <div class="list">${list.length ? list.map((q) => quoteRow(q, ['approved', 'invoiced', 'paid'].includes(q.status) ? '#/invoice/' + q.id : null)).join('') : '<div class="empty g card">Nada por aquí todavía.</div>'}</div>`;
-  $app.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { invFilter = b.dataset.f; route(); });
 }
 
 let cliFilter = 'all';
@@ -615,7 +544,7 @@ function viewClient(id) {
       <button class="btn primary" type="submit">${isNew ? 'Guardar cliente' : 'Guardar cambios'}</button>
     </form>
     ${isNew ? '' : `<button class="btn secondary" id="nq">${I.plus} Nueva cotización para ${esc(c.name.split(' ')[0])}</button>
-    <h2>Trabajos</h2><div class="list">${mine.length ? mine.map((q) => quoteRow(q, ['approved', 'invoiced', 'paid'].includes(q.status) ? '#/invoice/' + q.id : null)).join('') : '<div class="empty g card">Sin trabajos todavía.</div>'}</div>`}`;
+    <h2>Trabajos</h2><div class="list">${mine.length ? mine.map((q) => quoteRow(q)).join('') : '<div class="empty g card">Sin trabajos todavía.</div>'}</div>`}`;
   cf.addEventListener('submit', (e) => {
     e.preventDefault();
     const saved = S.upsertClient({ ...(isNew ? {} : { id: c.id }), name: cn.value.trim(), phone: cp.value.trim(), email: ce.value.trim(), address: ca.value.trim() });
@@ -623,17 +552,17 @@ function viewClient(id) {
     go(isNew ? '#/client/' + saved.id : '#/clients');
   });
   const nq = $app.querySelector('#nq');
-  if (nq) nq.onclick = () => { const q = S.newQuote({ clientId: c.id, items: [{ en: '', es: '', note: '', qty: 1, price: 0 }] }); go('#/q/' + q.id); };
+  if (nq) nq.onclick = () => go('#/quote-form/new/' + c.id);
 }
 
 function viewSettings() {
-  setTabs('settings');
+  setTabs(null);
   const s = S.settings();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   const used = S.quotes().filter((q) => q.createdAt >= monthStart).length;
   $app.innerHTML = `
-    <h1>Ajustes</h1>
+    ${topbar('Editar perfil y ajustes', '#/profile')}
     <div class="card g" style="flex-direction:row;align-items:center;gap:14px">
       <label for="logo" class="avatar" id="lp" style="width:60px;height:60px;border-radius:18px;background:var(--grad);cursor:pointer;overflow:hidden;font-family:'Space Grotesk';font-size:20px" aria-label="Cambiar logo">${s.logo ? `<img class="logo-img" src="${esc(s.logo)}" alt="">` : esc(initials(s.bizName))}</label>
       <input id="logo" type="file" accept="image/*" class="vh">
@@ -648,6 +577,24 @@ function viewSettings() {
           <div class="field"><label for="ph">Teléfono</label><input id="ph" type="tel" value="${esc(s.phone)}"></div>
         </div>
         <div class="field"><label for="em">Correo</label><input id="em" type="email" value="${esc(s.email)}"></div>
+        <div class="field"><label for="ow">Dueño / responsable</label><input id="ow" value="${esc(s.owner)}" placeholder="Ej. Carlos Martínez"></div>
+        <div class="field"><label for="ad">Dirección</label><input id="ad" value="${esc(s.address)}" placeholder="Ej. 4520 Main St"></div>
+        <div class="grid2">
+          <div class="field"><label for="cy">Ciudad y ZIP</label><input id="cy" value="${esc(s.city)}" placeholder="Houston, TX 77002"></div>
+          <div class="field"><label for="yr">Años de experiencia</label><input id="yr" type="number" min="0" value="${esc(s.years)}"></div>
+        </div>
+        <div class="field"><label for="wb">Sitio web o redes</label><input id="wb" value="${esc(s.website)}" placeholder="www.minegocio.com"></div>
+        <div class="grid2">
+          <div class="field"><label for="lc">Licencia #</label><input id="lc" value="${esc(s.license)}" placeholder="Opcional"></div>
+          <div class="field"><span class="flabel">Asegurado</span><label class="row g" style="min-height:50px;border-radius:14px;padding:0 14px;cursor:pointer"><span style="font-size:14px">Tengo seguro</span><input id="ins" type="checkbox" ${s.insured ? 'checked' : ''}></label></div>
+        </div>
+      </div>
+      <div class="card g">
+        <span class="label">Perfil público</span>
+        <div class="field"><label for="ab">Sobre la empresa</label><textarea id="ab" placeholder="Ej. Family-owned painting company serving Houston since 2012.">${esc(s.about)}</textarea></div>
+        <div class="field"><label for="sv">Servicios (separados por coma)</label><textarea id="sv">${esc(s.services)}</textarea></div>
+        <div class="field"><label for="wa">Garantía</label><input id="wa" value="${esc(s.warranty)}"></div>
+        <div class="field"><label for="hr">Horario</label><input id="hr" value="${esc(s.hours)}"></div>
       </div>
       <div class="card tight g">
         <div class="setting"><label for="tax" style="font-size:14px">Impuesto (sales tax) %</label><input id="tax" type="number" step="0.01" min="0" value="${s.taxRate}"></div>
@@ -684,10 +631,12 @@ function viewSettings() {
     S.updateSettings({
       bizName: biz.value.trim(), state: st.value.trim(), phone: ph.value.trim(), email: em.value.trim(),
       taxRate: Number(tax.value) || 0, depositPct: Number(dep.value) || 0, validDays: Number(vd.value) || 30,
-      clientLang: lang, terms: terms.value.trim(), paymentLink: pay.value.trim(), aiEndpoint: ai.value.trim()
+      clientLang: lang, terms: terms.value.trim(), paymentLink: pay.value.trim(), aiEndpoint: ai.value.trim(),
+      owner: ow.value.trim(), address: ad.value.trim(), city: cy.value.trim(), years: yr.value.trim(), website: wb.value.trim(),
+      license: lc.value.trim(), insured: ins.checked, about: ab.value.trim(), services: sv.value.trim(), warranty: wa.value.trim(), hours: hr.value.trim()
     });
-    toast('Ajustes guardados');
-    route();
+    toast('Perfil guardado');
+    go('#/profile');
   });
   exp.onclick = () => {
     const blob = new Blob([JSON.stringify(S.getDB(), null, 2)], { type: 'application/json' });
@@ -699,66 +648,549 @@ function viewSettings() {
   reset.onclick = () => { if (confirm('Esto borra todo en este teléfono. ¿Seguro?')) { S.resetAll(); go('#/welcome'); } };
 }
 
-/* ---------- Vista pública del cliente (inglés / español) ---------- */
+/* ---------- Textos para el cliente (inglés / español) ---------- */
 const TXT = {
-  en: { estimate: 'Estimate', invoice: 'Invoice', valid: 'Valid until', due: 'Due', for: 'Prepared for', job: 'Job', tax: 'Tax', total: 'Total', dep: 'Deposit due to start', paid: 'Paid', bal: 'Balance due', sign: 'Sign to approve', signNote: 'By signing you accept the scope and terms of this estimate.', approve: 'Approve estimate', approved: 'Estimate approved', notify: 'Let us know on WhatsApp', payDep: 'Pay deposit', pay: 'Pay now', terms: 'Terms', sent: 'Sent with CotizaPro', needName: 'Type your name to sign', thanks: 'Thank you! Please notify us so we can schedule your job.' },
-  es: { estimate: 'Cotización', invoice: 'Factura', valid: 'Válida hasta', due: 'Vence', for: 'Para', job: 'Trabajo', tax: 'Impuesto', total: 'Total', dep: 'Anticipo para empezar', paid: 'Pagado', bal: 'Saldo pendiente', sign: 'Firma para aprobar', signNote: 'Al firmar aceptas el alcance y los términos de esta cotización.', approve: 'Aprobar cotización', approved: 'Cotización aprobada', notify: 'Avisar por WhatsApp', payDep: 'Pagar anticipo', pay: 'Pagar ahora', terms: 'Términos', sent: 'Enviada con CotizaPro', needName: 'Escribe tu nombre para firmar', thanks: '¡Gracias! Avísanos para agendar tu trabajo.' }
+  en: {
+    estimate: 'Estimate', invoice: 'Invoice', date: 'Date', valid: 'Valid until', due: 'Due', billTo: 'Customer', jobSite: 'Job site',
+    start: 'Start date', duration: 'Estimated duration', scope: 'Scope of work', desc: 'Description', amount: 'Amount', subtotal: 'Subtotal',
+    tax: 'Tax', total: 'Total', dep: 'Deposit due to start', paid: 'Paid', bal: 'Balance due', terms: 'Payment terms', warranty: 'Warranty',
+    excl: 'Not included', accept: 'Acceptance', lic: 'License', insured: 'Licensed & insured', insuredOnly: 'Insured',
+    sign: 'Type your full name to sign', signNote: 'By signing you accept the scope, price and terms of this estimate.',
+    approve: 'Approve estimate', approved: 'Estimate approved!', confirm: 'Confirm approval on WhatsApp',
+    confirmNote: 'Tap the button to send your approval. The company will create your work order and send you a tracking link.',
+    payDep: 'Pay deposit', pay: 'Pay now', sent: 'Sent with CotizaPro', needName: 'Type your name to sign',
+    wo: 'Work order', progress: 'Progress', updates: 'Updates', contact: 'Message us on WhatsApp', track: 'Job tracking', lastUpd: 'Last update',
+    about: 'About us', services: 'Services', years: 'years of experience', hours: 'Hours', request: 'Request a quote on WhatsApp', call: 'Call'
+  },
+  es: {
+    estimate: 'Cotización', invoice: 'Factura', date: 'Fecha', valid: 'Válida hasta', due: 'Vence', billTo: 'Cliente', jobSite: 'Lugar del trabajo',
+    start: 'Fecha de inicio', duration: 'Duración estimada', scope: 'Alcance del trabajo', desc: 'Descripción', amount: 'Monto', subtotal: 'Subtotal',
+    tax: 'Impuesto', total: 'Total', dep: 'Anticipo para empezar', paid: 'Pagado', bal: 'Saldo pendiente', terms: 'Condiciones de pago', warranty: 'Garantía',
+    excl: 'No incluye', accept: 'Aceptación', lic: 'Licencia', insured: 'Con licencia y seguro', insuredOnly: 'Asegurado',
+    sign: 'Escribe tu nombre completo para firmar', signNote: 'Al firmar aceptas el alcance, el precio y las condiciones de esta cotización.',
+    approve: 'Aprobar cotización', approved: '¡Cotización aprobada!', confirm: 'Confirmar aprobación por WhatsApp',
+    confirmNote: 'Toca el botón para enviar tu aprobación. La empresa creará tu orden de trabajo y te enviará el link de seguimiento.',
+    payDep: 'Pagar anticipo', pay: 'Pagar ahora', sent: 'Enviada con CotizaPro', needName: 'Escribe tu nombre para firmar',
+    wo: 'Orden de trabajo', progress: 'Avance', updates: 'Avances', contact: 'Escríbenos por WhatsApp', track: 'Seguimiento de la obra', lastUpd: 'Última actualización',
+    about: 'Sobre nosotros', services: 'Servicios', years: 'años de experiencia', hours: 'Horario', request: 'Pedir cotización por WhatsApp', call: 'Llamar'
+  }
 };
+const STAGE_EN = {
+  'Orden de trabajo creada': 'Work order created',
+  'Visita y medidas': 'Site visit & measurements',
+  'Materiales comprados': 'Materials purchased',
+  'Trabajo en progreso': 'Work in progress',
+  'Revisión final con el cliente': 'Final walkthrough with you',
+  'Trabajo terminado': 'Job completed',
+  'Orden de trabajo creada. Pronto te contactamos para programar.': 'Work order created. We will contact you soon to schedule.'
+};
+const trStage = (txt, L) => (L === 'en' && STAGE_EN[txt]) || txt;
+const fullDate = (t, L) => t ? new Date(typeof t === 'string' && t.length === 10 ? t + 'T12:00' : t).toLocaleDateString(L === 'es' ? 'es-US' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+const smallIcon = (svg) => svg.replace(/width="\d+" height="\d+"/, 'width="14" height="14"');
+
+/* ---------- Perfil de la empresa ---------- */
+function logoBox(b, size = 52, radius = 16) {
+  return `<span class="avatar g" style="width:${size}px;height:${size}px;border-radius:${radius}px;color:#fff;overflow:hidden;font-family:'Space Grotesk';font-size:${Math.round(size / 3)}px;flex-shrink:0">${b.logo ? `<img class="logo-img" src="${esc(b.logo)}" alt="">` : esc(initials(b.n))}</span>`;
+}
+
+function profileHTML(b, L, isPublic) {
+  const T = TXT[L] || TXT.es;
+  const contact = (icon, text, href) => text ? `<a class="setting" ${href ? `href="${esc(href)}" target="_blank" rel="noopener"` : ''} style="color:#fff;justify-content:flex-start;gap:12px"><span style="color:var(--cyan)">${icon}</span><span style="font-size:14px;word-break:break-word">${esc(text)}</span></a>` : '';
+  const site = b.web ? (b.web.startsWith('http') ? b.web : 'https://' + b.web) : '';
+  return `
+    <div class="card g" style="align-items:center;text-align:center;padding:24px 18px;gap:12px;background:linear-gradient(160deg,rgba(34,211,238,0.20),rgba(167,139,250,0.22))">
+      ${logoBox(b, 92, 28)}
+      <div class="col" style="align-items:center;gap:4px">
+        <h1 style="font-size:24px">${esc(b.n || 'Mi empresa')}</h1>
+        ${b.owner ? `<span class="muted" style="font-size:14px">${esc(b.owner)}</span>` : ''}
+      </div>
+      <div class="pills" style="justify-content:center">
+        ${b.ins ? `<span class="chip green">${smallIcon(I.shield)} ${b.lic ? T.insured : T.insuredOnly}</span>` : ''}
+        ${b.lic ? `<span class="chip violet">${T.lic} #${esc(b.lic)}</span>` : ''}
+        ${b.years ? `<span class="chip cyan">${esc(b.years)} ${T.years}</span>` : ''}
+      </div>
+    </div>
+    ${b.about ? `<div class="card g"><span class="label">${T.about}</span><p style="font-size:14px;line-height:1.55">${esc(b.about)}</p></div>` : ''}
+    ${b.services?.length ? `<div class="card g"><span class="label v">${T.services}</span><div class="pills">${b.services.map((x) => `<span class="chip gray" style="font-size:13px;padding:7px 12px;color:#fff">${esc(x)}</span>`).join('')}</div></div>` : ''}
+    <div class="card tight g">
+      ${contact(I.phone, b.p, b.p ? 'tel:' + digits(b.p) : '')}
+      ${contact(I.whatsapp.replace(/width="\d+" height="\d+"/, 'width="18" height="18"'), b.p ? 'WhatsApp' : '', b.p ? 'https://wa.me/' + usPhone(b.p) : '')}
+      ${contact(I.mail, b.e, b.e ? 'mailto:' + b.e : '')}
+      ${contact(I.globe, b.web, site)}
+      ${contact(I.pin, b.addr || b.st, b.addr ? 'https://maps.google.com/?q=' + encodeURIComponent(b.addr) : '')}
+      ${contact(I.clock, b.hours ? `${T.hours}: ${b.hours}` : '', '')}
+      ${contact(I.shield.replace(/width="\d+" height="\d+"/, 'width="18" height="18"'), b.warranty, '')}
+    </div>
+    ${isPublic && b.p ? `<a class="btn primary" target="_blank" rel="noopener" href="https://wa.me/${usPhone(b.p)}?text=${encodeURIComponent(L === 'es' ? `Hola ${b.n}, quisiera una cotización.` : `Hi ${b.n}, I would like a quote.`)}">${I.whatsapp} ${T.request}</a>` : ''}`;
+}
+
+function viewProfile() {
+  setTabs('profile');
+  const b = bizInfo(true);
+  $app.innerHTML = `
+    <div class="row"><h1>Perfil de la empresa</h1><a class="icon-btn" href="#/settings" aria-label="Editar perfil">${I.pen}</a></div>
+    ${profileHTML(b, 'es', false)}
+    <a class="btn primary" href="#/quote-form">${I.tool} Cotizar servicio</a>
+    <button class="btn secondary" id="shp">${I.share} Compartir perfil con un cliente</button>
+    <a class="btn secondary" href="#/settings">${I.gear} Editar perfil y ajustes</a>`;
+  shp.onclick = async () => {
+    const url = `${appBase()}#/c/${S.encodeShare({ v: 2, kind: 'profile', b: bizInfo(true), lang: S.settings().clientLang })}`;
+    const text = `${b.n} — ${url}`;
+    if (navigator.share) { try { await navigator.share({ title: b.n, text }); return; } catch (e) { return; } }
+    try { await navigator.clipboard.writeText(url); toast('Link del perfil copiado'); } catch (e) { prompt('Copia este link:', url); }
+  };
+}
+
+/* ---------- Formulario de cotización ---------- */
+function startDictation(textarea, statusEl, btn) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Tu navegador no permite dictado'); return null; }
+  const r = new SR();
+  r.lang = 'es-US'; r.continuous = true; r.interimResults = true;
+  const base = textarea.value ? textarea.value.trim() + ' ' : '';
+  let fin = '';
+  r.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) fin += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
+    }
+    textarea.value = base + fin + interim;
+  };
+  r.onstart = () => { btn.classList.add('on'); statusEl.textContent = 'Escuchando… toca otra vez para terminar'; };
+  r.onend = () => { btn.classList.remove('on'); statusEl.textContent = ''; btn._rec = null; };
+  r.onerror = (e) => { statusEl.textContent = e.error === 'not-allowed' ? 'Permite el micrófono' : 'No te escuché, intenta otra vez'; };
+  r.start();
+  return r;
+}
+
+function viewQuoteForm(arg, extra) {
+  setTabs(null);
+  const s = S.settings();
+  const editing = arg && arg !== 'new' ? S.getQuote(arg) : null;
+  if (arg && arg !== 'new' && !editing) return go('#/quote-form');
+  const q = editing || { items: [{ en: '', es: '', note: '', qty: 1, price: 0 }], taxRate: s.taxRate, depositPct: s.depositPct, clientId: extra || null, title: '', scope: '', jobAddress: '', startDate: '', duration: '', exclusions: '' };
+  const c = S.getClient(q.clientId) || { name: '', phone: '', email: '', address: '' };
+  const services = (s.services || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const validDays = editing ? Math.max(1, Math.round((q.validUntil - q.createdAt) / 86400000)) : s.validDays;
+  $app.innerHTML = `
+    ${topbar(editing ? 'Editar cotización #' + q.number : 'Cotizar servicio', editing ? '#/doc/' + q.id : '#/profile')}
+    <form id="qf" class="list" style="gap:14px" novalidate>
+      <div class="card g">
+        <span class="label">1 · Datos del cliente</span>
+        ${S.clients().length ? `<div class="field"><label for="cli">Cliente existente</label><select id="cli"><option value="">— Cliente nuevo —</option>${S.clients().map((x) => `<option value="${x.id}" ${x.id === q.clientId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}
+        <div class="field"><label for="cn">Nombre completo *</label><input id="cn" autocomplete="off" value="${esc(c.name)}" placeholder="Ej. Jennifer Smith"></div>
+        <div class="grid2">
+          <div class="field"><label for="cp">WhatsApp / teléfono *</label><input id="cp" type="tel" value="${esc(c.phone)}" placeholder="(713) 555-0100"></div>
+          <div class="field"><label for="ce">Correo</label><input id="ce" type="email" value="${esc(c.email)}" placeholder="correo@..."></div>
+        </div>
+        <div class="field"><label for="ca">Dirección del cliente</label><input id="ca" value="${esc(c.address)}" placeholder="Ej. 120 Oak St, Houston, TX"></div>
+      </div>
+
+      <div class="card g">
+        <span class="label">2 · Servicio</span>
+        ${services.length ? `<div class="field"><span class="flabel">Tipo de servicio</span><div class="pills">${services.map((x) => `<button type="button" class="pill" data-svc="${esc(x)}" aria-pressed="${q.title === x}">${esc(x)}</button>`).join('')}</div></div>` : ''}
+        <div class="field"><label for="ttl">Título del trabajo (lo ve el cliente)</label><input id="ttl" value="${esc(q.title)}" placeholder="Ej. Interior painting"></div>
+        <div class="field"><label for="job">Lugar del trabajo</label><input id="job" value="${esc(q.jobAddress)}" placeholder="Igual que la dirección del cliente"></div>
+        <div class="field"><label for="scope">Alcance del trabajo (lo lee el cliente tal cual)</label>
+          <textarea id="scope" placeholder="Ej. Paint 3 bedrooms, walls and trim, 2 coats. Patch cracks before painting. Move and cover furniture.">${esc(q.scope || q.transcript || '')}</textarea>
+          <div class="row" style="justify-content:flex-start;gap:10px">
+            <button type="button" class="icon-btn" id="dict" aria-label="Dictar con voz">${I.mic(20)}</button>
+            <button type="button" class="link-btn" id="genit">Generar partidas desde la descripción</button>
+          </div>
+          <span class="small muted" id="dst"></span>
+        </div>
+      </div>
+
+      <div class="card g">
+        <span class="label v">3 · Partidas y precios</span>
+        <div class="list" id="lines">${q.items.map((it, i) => lineHTML(it, i)).join('')}</div>
+        <button type="button" class="btn secondary" id="add">${I.plus} Agregar partida</button>
+      </div>
+
+      <div class="card g">
+        <span class="label">4 · Fechas y condiciones</span>
+        <div class="grid2">
+          <div class="field"><label for="sd">Fecha de inicio</label><input id="sd" type="date" value="${esc(q.startDate)}"></div>
+          <div class="field"><label for="du">Duración estimada</label><input id="du" value="${esc(q.duration)}" placeholder="Ej. 3 days"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="tax">Impuesto %</label><input id="tax" type="number" step="0.01" min="0" value="${q.taxRate}"></div>
+          <div class="field"><label for="dep">Anticipo %</label><input id="dep" type="number" min="0" max="100" value="${q.depositPct}"></div>
+        </div>
+        <div class="field"><label for="vd">Válida por (días)</label><input id="vd" type="number" min="1" value="${validDays}"></div>
+        <div class="field"><label for="ex">No incluye (opcional)</label><input id="ex" value="${esc(q.exclusions)}" placeholder="Ej. Wallpaper removal, furniture moving"></div>
+        <div class="sep"></div>
+        <div id="tot"></div>
+      </div>
+
+      <button class="btn primary" type="submit">${I.check} ${editing ? 'Guardar y ver cotización' : 'Generar cotización'}</button>
+    </form>`;
+
+  const tmp = () => ({
+    items: [...$app.querySelectorAll('.line')].map((el) => ({
+      en: el.querySelector('[data-f=en]').value.trim(), es: el.querySelector('[data-f=es]').value.trim(), note: el.querySelector('[data-f=note]').value.trim(),
+      qty: Number(el.querySelector('[data-f=qty]').value) || 0, price: Number(el.querySelector('[data-f=price]').value) || 0
+    })),
+    taxRate: Number(tax.value) || 0, depositPct: Number(dep.value) || 0, payments: []
+  });
+  const refresh = () => { $app.querySelector('#tot').innerHTML = totalsHTML(tmp()); };
+  refresh();
+  $app.addEventListener('input', (e) => { if (e.target.closest('#lines') || e.target.matches('#tax, #dep')) refresh(); });
+  $app.querySelector('#lines').addEventListener('click', (e) => { const b = e.target.closest('[data-rm]'); if (b) { b.closest('.line').remove(); refresh(); } });
+  add.onclick = () => { $app.querySelector('#lines').insertAdjacentHTML('beforeend', lineHTML({ en: '', es: '', note: '', qty: 1, price: 0 }, Date.now())); $app.querySelector('#lines .line:last-child [data-f=en]').focus(); };
+  const cliSel = $app.querySelector('#cli');
+  if (cliSel) cliSel.onchange = () => {
+    const x = S.getClient(cliSel.value) || { name: '', phone: '', email: '', address: '' };
+    cn.value = x.name; cp.value = x.phone; ce.value = x.email; ca.value = x.address;
+  };
+  $app.querySelectorAll('[data-svc]').forEach((b) => b.onclick = () => {
+    ttl.value = b.dataset.svc;
+    $app.querySelectorAll('[data-svc]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  });
+  dict.onclick = () => { if (dict._rec) { dict._rec.stop(); return; } dict._rec = startDictation(scope, dst, dict); };
+  genit.onclick = async () => {
+    if (!scope.value.trim()) { toast('Escribe o dicta la descripción primero'); return; }
+    genit.textContent = 'Generando…';
+    const r = await parseDictation(scope.value, { aiEndpoint: s.aiEndpoint, trade: s.trade, state: s.state });
+    const lines = $app.querySelector('#lines');
+    const current = tmp().items.filter((i) => i.en || i.price);
+    lines.innerHTML = [...current, ...r.items].map((it, i) => lineHTML(it, i)).join('');
+    if (!ttl.value && r.title) ttl.value = r.title;
+    if (!cn.value && r.client) cn.value = r.client;
+    if (!ca.value && r.city) ca.value = r.city;
+    genit.textContent = 'Generar partidas desde la descripción';
+    refresh();
+    toast('Partidas agregadas: revisa precios');
+  };
+  qf.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = cn.value.trim();
+    const t = tmp();
+    if (!name) { toast('Escribe el nombre del cliente'); cn.focus(); return; }
+    if (!cp.value.trim()) { toast('Escribe el WhatsApp del cliente'); cp.focus(); return; }
+    t.items = t.items.filter((i) => i.en || i.es || i.price);
+    if (!t.items.length || !t.items.some((i) => i.price > 0)) { toast('Agrega al menos una partida con precio'); return; }
+    let client = cliSel && cliSel.value ? S.getClient(cliSel.value) : S.clients().find((x) => x.name.toLowerCase() === name.toLowerCase());
+    client = S.upsertClient({ ...(client ? { id: client.id } : {}), name, phone: cp.value.trim(), email: ce.value.trim(), address: ca.value.trim() });
+    const data = {
+      clientId: client.id, title: ttl.value.trim(), jobAddress: job.value.trim(), scope: scope.value.trim(), items: t.items,
+      startDate: sd.value, duration: du.value.trim(), taxRate: t.taxRate, depositPct: t.depositPct, exclusions: ex.value.trim()
+    };
+    let saved;
+    if (editing) {
+      saved = S.updateQuote(editing.id, { ...data, validUntil: editing.createdAt + (Number(vd.value) || 30) * 86400000 }, 'Cotización editada');
+    } else {
+      saved = S.newQuote(data);
+      S.updateQuote(saved.id, { validUntil: saved.createdAt + (Number(vd.value) || 30) * 86400000 });
+    }
+    toast('Cotización lista');
+    go('#/doc/' + saved.id);
+  });
+}
+
+/* ---------- Formato profesional de cotización ---------- */
+function docHTML(p, L) {
+  const T = TXT[L] || TXT.en;
+  const q = p.q, b = p.b;
+  const t = S.totals({ items: q.items, taxRate: q.tax, depositPct: q.dep, payments: q.paid ? [{ amount: q.paid }] : [] });
+  const inv = p.kind === 'invoice';
+  const desc = (i) => (L === 'es' && i.es ? i.es : i.en || i.es);
+  const kv = (k, v) => v ? `<div class="col"><span class="small muted">${k}</span><span style="font-size:14px;font-weight:600">${esc(v)}</span></div>` : '';
+  return `
+  <article class="card g doc" style="gap:14px;padding:18px">
+    <div class="row" style="align-items:flex-start">
+      <div class="row" style="gap:12px;justify-content:flex-start;align-items:flex-start;min-width:0">
+        ${logoBox(b, 52, 16)}
+        <div class="col" style="gap:2px">
+          <span class="display" style="font-size:16px;font-weight:700">${esc(b.n)}</span>
+          ${b.owner ? `<span class="small muted">${esc(b.owner)}</span>` : ''}
+          ${b.addr ? `<span class="small muted">${esc(b.addr)}</span>` : ''}
+          <span class="small muted">${esc([b.p, b.e].filter(Boolean).join(' · '))}</span>
+          ${b.web ? `<span class="small muted">${esc(b.web)}</span>` : ''}
+        </div>
+      </div>
+      <div class="col" style="align-items:flex-end;text-align:right;flex-shrink:0">
+        <span class="label" style="font-size:12px">${inv ? T.invoice : T.estimate}</span>
+        <span class="display" style="font-size:18px;font-weight:700">#${q.n}</span>
+        <span class="small muted">${fullDate(q.created, L)}</span>
+      </div>
+    </div>
+    ${b.ins || b.lic ? `<div class="pills">${b.ins ? `<span class="chip green">${smallIcon(I.shield)} ${b.lic ? T.insured : T.insuredOnly}</span>` : ''}${b.lic ? `<span class="chip violet">${T.lic} #${esc(b.lic)}</span>` : ''}</div>` : ''}
+    <div class="sep"></div>
+    <div class="grid2" style="align-items:start">
+      <div class="col" style="gap:3px"><span class="label">${T.billTo}</span>
+        <span style="font-size:14px;font-weight:600">${esc(q.client)}</span>
+        ${q.addr ? `<span class="small muted">${esc(q.addr)}</span>` : ''}
+        ${q.cphone ? `<span class="small muted">${esc(q.cphone)}</span>` : ''}
+        ${q.cemail ? `<span class="small muted">${esc(q.cemail)}</span>` : ''}</div>
+      <div class="col" style="gap:3px"><span class="label">${T.jobSite}</span>
+        <span style="font-size:14px;font-weight:600">${esc(q.title || '—')}</span>
+        ${q.job ? `<span class="small muted">${esc(q.job)}</span>` : ''}</div>
+    </div>
+    ${q.start || q.dur || q.valid ? `<div class="grid2">${kv(T.start, q.start ? fullDate(q.start, L) : '')}${kv(T.duration, q.dur)}${inv ? kv(T.due, q.due ? fullDate(q.due, L) : '') : kv(T.valid, fullDate(q.valid, L))}</div>` : ''}
+    ${q.scope ? `<div class="col" style="gap:6px"><span class="label v">${T.scope}</span><p style="font-size:14px;line-height:1.55;white-space:pre-line">${esc(q.scope)}</p></div>` : ''}
+    <div class="col" style="gap:0">
+      <div class="row small muted" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${T.desc}</span><span>${T.amount}</span></div>
+      ${q.items.map((i) => `<div class="row" style="align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)">
+        <span class="col"><span style="font-size:14px;font-weight:500">${esc(desc(i))}</span>
+        <span class="small muted">${i.qty} × ${S.money(i.price)}${i.note ? ' · ' + esc(i.note) : ''}</span></span>
+        <span style="font-size:14px;font-weight:600">${S.money(i.qty * i.price)}</span></div>`).join('')}
+    </div>
+    <div class="list" style="gap:6px">
+      <div class="row small muted" style="font-size:13px"><span>${T.subtotal}</span><span>${S.money(t.subtotal)}</span></div>
+      <div class="row small muted" style="font-size:13px"><span>${T.tax} (${q.tax}%)</span><span>${S.money(t.tax)}</span></div>
+      <div class="row"><span style="font-weight:600">${T.total}</span><span class="big">${S.money(t.total)}</span></div>
+      ${inv ? `<div class="row small muted"><span>${T.paid}</span><span>${S.money(t.paid)}</span></div>
+        <div class="row" style="padding:10px 12px;border-radius:14px;background:rgba(110,231,183,0.16)"><span style="font-size:13px">${T.bal}</span><span style="font-weight:700;color:var(--green-soft)">${S.money(t.balance)}</span></div>`
+      : q.dep ? `<div class="row" style="padding:10px 12px;border-radius:14px;background:rgba(34,211,238,0.16)"><span style="font-size:13px">${T.dep} (${q.dep}%)</span><span style="font-weight:700;color:var(--cyan-soft)">${S.money(t.deposit)}</span></div>` : ''}
+    </div>
+    ${q.terms ? `<div class="col" style="gap:4px"><span class="label v">${T.terms}</span><p class="small muted" style="line-height:1.5">${esc(q.terms)}</p></div>` : ''}
+    ${b.warranty ? `<div class="col" style="gap:4px"><span class="label v">${T.warranty}</span><p class="small muted" style="line-height:1.5">${esc(b.warranty)}</p></div>` : ''}
+    ${q.excl ? `<div class="col" style="gap:4px"><span class="label v">${T.excl}</span><p class="small muted" style="line-height:1.5">${esc(q.excl)}</p></div>` : ''}
+  </article>`;
+}
+
+function viewDoc(id) {
+  const q = S.getQuote(id);
+  if (!q) return go('#/works');
+  setTabs(null);
+  const L = docLang || S.settings().clientLang || 'en';
+  const p = sharePayload(q, 'estimate');
+  $app.innerHTML = `
+    ${topbar('Cotización #' + q.number, '#/works', `<a class="icon-btn" href="#/quote-form/${q.id}" aria-label="Editar cotización">${I.pen}</a>`)}
+    <div class="row no-print">${chip(q)}
+      <div class="seg" role="group" aria-label="Idioma de vista"><button data-l="en" aria-pressed="${L === 'en'}">EN</button><button data-l="es" aria-pressed="${L === 'es'}">ES</button></div></div>
+    ${docHTML(p, L)}
+    ${q.signature ? `<div class="card g"><span class="label">Aprobada</span><span class="sig" style="font-size:24px;border:none">${esc(q.signature)}</span><span class="small muted">${q.approvedAt ? fullDate(q.approvedAt, 'es') : ''}</span></div>` : ''}
+    <div class="list no-print">
+      ${q.wo ? `<a class="btn green" href="#/wo/${q.id}">${I.tool} Ver orden de trabajo #${q.wo.number}</a>` : `<button class="btn primary" id="send">${I.whatsapp} Enviar al cliente por WhatsApp</button>`}
+      <a class="btn secondary" href="${esc(shareUrl(q))}">${I.eye} Ver como el cliente</a>
+      ${!q.wo ? `<button class="btn secondary" id="appr">${I.check} El cliente aprobó (crear orden de trabajo)</button>` : ''}
+      <button class="btn secondary" id="pdf">${I.print} Descargar PDF</button>
+      <button class="btn danger" id="del">${I.trash} Eliminar cotización</button>
+    </div>
+    ${historyHTML(q)}`;
+  $app.querySelectorAll('[data-l]').forEach((b) => b.onclick = () => { docLang = b.dataset.l; route(); });
+  const sn = $app.querySelector('#send');
+  if (sn) sn.onclick = () => openShare(q, 'estimate');
+  const ap = $app.querySelector('#appr');
+  if (ap) ap.onclick = () => {
+    const name = prompt('Nombre de quien aprobó:', S.getClient(q.clientId)?.name || '');
+    if (name === null) return;
+    S.createWorkOrder(q.id, name.trim(), 'marcada en la app');
+    toast('Orden de trabajo creada');
+    go('#/wo/' + q.id);
+  };
+  pdf.onclick = () => window.print();
+  del.onclick = () => { if (confirm('¿Eliminar esta cotización?')) { S.deleteQuote(q.id); go('#/works'); } };
+}
+let docLang = null;
+
+/* ---------- Aprobación que llega desde el cliente ---------- */
+function viewApprove(id, sigEnc) {
+  setTabs(null);
+  const q = S.getQuote(id);
+  let sig = '';
+  try { sig = decodeURIComponent(sigEnc || ''); } catch (e) { sig = ''; }
+  if (!q) {
+    $app.innerHTML = `${topbar('Aprobación', '#/home')}<div class="card g empty">No encontré esta cotización en este teléfono.<br>Abre el link en el teléfono donde creaste la cotización.</div>`;
+    return;
+  }
+  const fresh = !q.wo;
+  S.createWorkOrder(q.id, sig, 'confirmada por el cliente');
+  $app.innerHTML = `
+    ${topbar('Cotización aprobada', '#/home')}
+    <div class="card g" style="align-items:center;text-align:center;padding:28px 18px;background:rgba(110,231,183,0.14)">
+      <span style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#6EE7B7,#67E8F9);color:#0A0F1F">${I.check}</span>
+      <h1 style="font-size:22px">${esc(S.getClient(q.clientId)?.name || 'El cliente')} aprobó la cotización #${q.number}</h1>
+      <span class="muted" style="font-size:14px">${fresh ? 'Se creó' : 'Ya existía'} la orden de trabajo #${q.wo.number}${sig ? ' · firmada por ' + esc(sig) : ''}</span>
+    </div>
+    <a class="btn primary" href="#/wo/${q.id}">${I.tool} Abrir orden de trabajo</a>`;
+}
+
+/* ---------- Orden de trabajo y seguimiento ---------- */
+function trackPayload(q) {
+  const c = S.getClient(q.clientId);
+  return {
+    v: 2, kind: 'track', base: appBase(), lang: S.settings().clientLang,
+    b: (({ n, p, e, logo, ins, lic }) => ({ n, p, e, logo, ins, lic }))(bizInfo(false)),
+    w: {
+      n: q.wo.number, qn: q.number, title: q.title, client: c?.name || '', job: q.jobAddress || c?.address || '',
+      start: q.startDate, dur: q.duration, pct: q.wo.progress,
+      st: q.wo.stages.map((x) => [x.label, x.done ? 1 : 0, x.t || 0]),
+      up: q.wo.updates.slice(-12).map((u) => [u.t, u.text, u.pct])
+    }
+  };
+}
+const trackUrl = (q) => `${appBase()}#/c/${S.encodeShare(trackPayload(q))}`;
+
+function sendTracking(q) {
+  const s = S.settings();
+  const c = S.getClient(q.clientId);
+  const first = (c?.name || '').split(' ')[0];
+  const last = q.wo.updates[q.wo.updates.length - 1];
+  const msg = s.clientLang === 'es'
+    ? `Hola ${first}, avance de tu obra (orden #${q.wo.number}): ${q.wo.progress}% completado.${last ? ' ' + last.text + '.' : ''} Mira el seguimiento aquí: ${trackUrl(q)}`
+    : `Hi ${first}, update on your job (work order #${q.wo.number}): ${q.wo.progress}% complete.${last ? ' ' + last.text + '.' : ''} See the progress here: ${trackUrl(q)}`;
+  window.open(`https://wa.me/${usPhone(c?.phone)}?text=${encodeURIComponent(msg)}`, '_blank');
+  S.updateQuote(q.id, { lastTrackSent: Date.now() }, 'Seguimiento enviado al cliente');
+}
+
+function stageList(stages, L, editable) {
+  return stages.map((x, i) => {
+    const [label, done, t] = Array.isArray(x) ? x : [x.label, x.done, x.t];
+    const dot = `<span style="width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;${done ? 'background:linear-gradient(135deg,#6EE7B7,#67E8F9);color:#0A0F1F' : 'border:2px solid rgba(255,255,255,0.3);color:transparent'}">${I.check.replace(/width="\d+" height="\d+"/, 'width="14" height="14"')}</span>`;
+    const body = `<span class="col" style="flex-grow:1"><span style="font-size:14px;font-weight:${done ? 600 : 400};color:${done ? '#fff' : 'var(--muted)'}">${esc(trStage(label, L))}</span>${t ? `<span class="small muted">${fullDate(t, L)}</span>` : ''}</span>`;
+    return editable
+      ? `<label class="row" style="justify-content:flex-start;gap:12px;min-height:48px;cursor:pointer">${dot}${body}<input type="checkbox" data-stage="${i}" ${done ? 'checked' : ''} ${i === 0 ? 'disabled' : ''} class="vh"></label>`
+      : `<div class="row" style="justify-content:flex-start;gap:12px;min-height:44px">${dot}${body}</div>`;
+  }).join('');
+}
+
+function viewWorkOrder(id) {
+  const q = S.getQuote(id);
+  if (!q) return go('#/works');
+  if (!q.wo) return go('#/doc/' + id);
+  setTabs(null);
+  const c = S.getClient(q.clientId);
+  const w = q.wo;
+  $app.innerHTML = `
+    ${topbar('Orden de trabajo #' + w.number, '#/works')}
+    <div class="card g" style="gap:8px">
+      <div class="row"><span style="font-size:16px;font-weight:700">${esc(q.title || 'Trabajo')}</span>${chip(q)}</div>
+      <span class="small muted">${esc(c?.name || '')}${q.jobAddress || c?.address ? ' · ' + esc(q.jobAddress || c.address) : ''}</span>
+      <div class="row small muted"><span>Cotización #${q.number} · ${S.money(S.totals(q).total)}</span><span>${q.startDate ? 'Inicio ' + fullDate(q.startDate, 'es') : ''}</span></div>
+    </div>
+    <div class="card g" style="gap:12px">
+      <div class="row"><span class="label">Avance de la obra</span><span class="big">${w.progress}%</span></div>
+      <div class="bar"><div style="width:${w.progress}%"></div></div>
+      <label for="pct" class="vh">Porcentaje de avance</label>
+      <input id="pct" type="range" min="0" max="100" step="5" value="${w.progress}" style="min-height:32px;padding:0;accent-color:#67E8F9;border:none;background:transparent">
+    </div>
+    ${w.progress >= 100 ? `<div class="card g" style="background:linear-gradient(135deg,rgba(110,231,183,0.22),rgba(103,232,249,0.18));gap:10px">
+      <span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} Trabajo terminado${q.completedAt ? ' · ' + fullDate(q.completedAt, 'es') : ''}</span>
+      <span class="small muted">Genera la factura final en PDF y envíala al cliente por WhatsApp o correo.</span>
+      <button class="btn green" id="finpdf">${I.print} Factura final en PDF</button>
+      <a class="btn secondary" href="#/invoice/${q.id}">${I.card} Registrar pagos</a>
+    </div>` : ''}
+    <div class="card g" style="gap:2px"><span class="label v" style="margin-bottom:6px">Etapas · toca para marcar</span>${stageList(w.stages, 'es', true)}</div>
+    <form class="card g" id="uf">
+      <label class="label" for="ut">Nuevo avance para el cliente</label>
+      <textarea id="ut" placeholder="Ej. Terminamos la primera mano en los 3 cuartos. Mañana segunda mano."></textarea>
+      <button class="btn secondary" type="submit">${I.check} Guardar avance</button>
+    </form>
+    <div class="list no-print">
+      <button class="btn green" id="st">${I.whatsapp} Enviar seguimiento al cliente</button>
+      <a class="btn secondary" href="${esc(trackUrl(q))}">${I.eye} Ver como el cliente</a>
+      <a class="btn secondary" href="#/invoice/${q.id}">${I.card} Factura y cobro</a>
+      <a class="btn secondary" href="#/doc/${q.id}">${I.file} Ver cotización aprobada</a>
+    </div>
+    <div class="card g"><span class="label v">Avances registrados</span>
+      ${[...w.updates].reverse().map((u) => `<div class="row" style="align-items:flex-start"><span class="col" style="flex-grow:1"><span style="font-size:14px">${esc(u.text)}</span><span class="small muted">${fullDate(u.t, 'es')} · ${u.pct}%</span></span></div>`).join('<div class="sep"></div>')}
+    </div>`;
+  pct.addEventListener('change', () => { S.setProgress(q.id, pct.value); route(); });
+  pct.addEventListener('input', () => { $app.querySelector('.big').textContent = pct.value + '%'; $app.querySelector('.bar > div').style.width = pct.value + '%'; });
+  $app.querySelectorAll('[data-stage]').forEach((cb) => cb.addEventListener('change', () => { S.setStage(q.id, Number(cb.dataset.stage), cb.checked); route(); }));
+  uf.addEventListener('submit', (e) => { e.preventDefault(); if (!ut.value.trim()) { toast('Escribe el avance'); return; } S.addUpdate(q.id, ut.value); toast('Avance guardado. Envíalo al cliente.'); route(); });
+  const fp = $app.querySelector('#finpdf');
+  if (fp) fp.onclick = () => sendInvoicePdf(q, fp);
+  st.onclick = () => { if (!c?.phone) { toast('El cliente no tiene WhatsApp guardado'); return; } sendTracking(q); route(); };
+}
+
+function viewTrack(p, L) {
+  const T = TXT[L] || TXT.en;
+  const w = p.w, b = p.b;
+  const last = w.up[w.up.length - 1];
+  $app.innerHTML = `
+    <div class="row">
+      <div class="row" style="gap:12px;justify-content:flex-start">${logoBox(b, 48, 16)}
+        <span class="col"><span class="display" style="font-size:17px;font-weight:700">${esc(b.n)}</span><span class="small muted">${T.track}</span></span></div>
+      <button class="chip gray" id="lng" style="border:1px solid var(--glass-border);padding:8px 12px;font-size:12px;cursor:pointer;color:#fff">${L === 'en' ? 'ES' : 'EN'}</button>
+    </div>
+    <div class="card g" style="gap:10px;background:linear-gradient(135deg,rgba(34,211,238,0.22),rgba(167,139,250,0.24))">
+      <div class="row"><span class="col"><span class="small muted">${T.wo} #${w.n}</span><span style="font-size:17px;font-weight:700">${esc(w.title || '—')}</span></span>
+        <span class="huge">${w.pct}%</span></div>
+      <div class="bar"><div style="width:${w.pct}%"></div></div>
+      <span class="small muted">${esc(w.client)}${w.job ? ' · ' + esc(w.job) : ''}</span>
+      ${last ? `<span class="small">${T.lastUpd}: ${fullDate(last[0], L)}</span>` : ''}
+    </div>
+    <div class="card g" style="gap:2px"><span class="label v" style="margin-bottom:6px">${T.progress}</span>${stageList(w.st, L, false)}</div>
+    <div class="card g"><span class="label">${T.updates}</span>
+      ${[...w.up].reverse().map((u) => `<div class="col"><span style="font-size:14px;line-height:1.45">${esc(trStage(u[1], L))}</span><span class="small muted">${fullDate(u[0], L)} · ${u[2]}%</span></div>`).join('<div class="sep"></div>')}
+    </div>
+    ${b.p ? `<a class="btn primary" target="_blank" rel="noopener" href="https://wa.me/${usPhone(b.p)}?text=${encodeURIComponent((L === 'es' ? 'Hola, sobre la orden de trabajo #' : 'Hi, about work order #') + w.n)}">${I.whatsapp} ${T.contact}</a>` : ''}
+    <p class="small muted" style="text-align:center">${T.sent}</p>`;
+  lng.onclick = () => { pubLang = L === 'en' ? 'es' : 'en'; route(); };
+}
+
+/* ---------- Obras y cotizaciones ---------- */
+let worksFilter = 'active';
+function viewWorks() {
+  setTabs('works');
+  const all = S.quotes();
+  const f = {
+    active: (q) => q.wo && q.status !== 'paid',
+    quotes: (q) => !q.wo && !['invoiced', 'paid'].includes(q.status),
+    paid: (q) => q.status === 'paid',
+    all: () => true
+  }[worksFilter];
+  const list = all.filter(f);
+  const n = (k) => all.filter({ active: (q) => q.wo && q.status !== 'paid', quotes: (q) => !q.wo && !['invoiced', 'paid'].includes(q.status) }[k]).length;
+  const pill = (k, label) => `<button class="pill" data-f="${k}" aria-pressed="${worksFilter === k}">${label}</button>`;
+  $app.innerHTML = `
+    <h1>Obras y cotizaciones</h1>
+    <div class="pills">${pill('active', 'En obra · ' + n('active'))}${pill('quotes', 'Cotizaciones · ' + n('quotes'))}${pill('paid', 'Pagadas')}${pill('all', 'Todas')}</div>
+    <div class="list">${list.length ? list.map((q) => quoteRow(q)).join('') : `<div class="empty g card">${worksFilter === 'active' ? 'No hay obras activas. Cuando un cliente apruebe una cotización, aquí aparece su orden de trabajo.' : 'Nada por aquí todavía.'}</div>`}</div>`;
+  $app.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { worksFilter = b.dataset.f; route(); });
+}
+
+/* ---------- Vista pública (cliente) ---------- */
 let pubLang = null;
 let pubApproved = '';
 function viewPublic(data, print) {
   setTabs(null);
   const p = S.decodeShare(data);
   if (!p) { $app.innerHTML = '<div class="empty g card">Este link no es válido o está incompleto.</div>'; return; }
-  const L = pubLang || p.q.lang || 'en';
+  const L = pubLang || p.lang || p.q?.lang || 'en';
   const T = TXT[L] || TXT.en;
   document.documentElement.lang = L;
-  const q = { items: p.q.items, taxRate: p.q.tax, depositPct: p.q.dep, payments: p.q.paid ? [{ amount: p.q.paid }] : [] };
-  const t = S.totals(q);
+  if (p.kind === 'track') return viewTrack(p, L);
+  if (p.kind === 'profile') {
+    $app.innerHTML = `<div class="row" style="justify-content:flex-end"><button class="chip gray" id="lng" style="border:1px solid var(--glass-border);padding:8px 12px;font-size:12px;cursor:pointer;color:#fff">${L === 'en' ? 'ES' : 'EN'}</button></div>${profileHTML(p.b, L, true)}`;
+    lng.onclick = () => { pubLang = L === 'en' ? 'es' : 'en'; route(); };
+    return;
+  }
+  const q = p.q;
   const inv = p.kind === 'invoice';
-  const date = (x) => (L === 'es' ? S.dateEs(x) : S.dateEn(x));
-  const desc = (i) => (L === 'es' && i.es ? i.es : i.en || i.es);
+  const t = S.totals({ items: q.items, taxRate: q.tax, depositPct: q.dep, payments: q.paid ? [{ amount: q.paid }] : [] });
+  const base = p.base || appBase();
+  const confirmUrl = `${base}#/ok/${q.id}/${encodeURIComponent(pubApproved)}`;
+  const confirmMsg = L === 'es'
+    ? `✅ Apruebo la cotización #${q.n} de ${S.money(t.total)}. Firma: ${pubApproved}. Crear orden de trabajo: ${confirmUrl}`
+    : `✅ I approve estimate #${q.n} for ${S.money(t.total)}. Signed: ${pubApproved}. Create work order: ${confirmUrl}`;
   $app.innerHTML = `
-    <div class="row">
-      <div class="row" style="gap:12px;justify-content:flex-start">
-        <span class="avatar g" style="width:48px;height:48px;border-radius:16px;color:#fff;overflow:hidden;font-family:'Space Grotesk';font-size:17px">${p.b.logo ? `<img class="logo-img" src="${esc(p.b.logo)}" alt="">` : esc(initials(p.b.n))}</span>
-        <span class="col"><span class="display" style="font-size:17px;font-weight:700">${esc(p.b.n)}</span><span class="small muted">${esc([p.b.st, p.b.p].filter(Boolean).join(' · '))}</span></span>
-      </div>
-      <button class="chip gray no-print" id="lng" style="border:1px solid var(--glass-border);padding:8px 12px;font-size:12px;cursor:pointer;color:#fff">${L === 'en' ? 'ES' : 'EN'}</button>
-    </div>
-    <div class="card g grid2" style="display:grid">
-      <div class="col"><span class="small muted">${inv ? T.invoice : T.estimate}</span><span style="font-weight:600">#${p.q.n}</span></div>
-      <div class="col"><span class="small muted">${inv ? T.due : T.valid}</span><span style="font-weight:600">${date(inv ? p.q.due || Date.now() : p.q.valid)}</span></div>
-      <div class="col"><span class="small muted">${T.for}</span><span style="font-weight:600">${esc(p.q.client)}</span></div>
-      <div class="col"><span class="small muted">${T.job}</span><span style="font-weight:600">${esc(p.q.title || '—')}</span></div>
-    </div>
-    <div class="card g">
-      ${p.q.items.map((i) => `<div class="row" style="align-items:flex-start;font-size:14px"><span class="col"><span>${esc(desc(i))}${i.qty !== 1 ? ` × ${i.qty}` : ''}</span>${i.note ? `<span class="small muted">${esc(i.note)}</span>` : ''}</span><span style="font-weight:600">${S.money(i.qty * i.price)}</span></div>`).join('')}
-      <div class="sep"></div>
-      <div class="row small muted" style="font-size:13px"><span>${T.tax} (${p.q.tax}%)</span><span>${S.money(t.tax)}</span></div>
-      <div class="row"><span style="font-weight:600">${T.total}</span><span class="big">${S.money(t.total)}</span></div>
-      ${inv ? `<div class="row small muted"><span>${T.paid}</span><span>${S.money(t.paid)}</span></div>
-        <div class="row" style="padding:10px 12px;border-radius:14px;background:rgba(110,231,183,0.16)"><span style="font-size:13px">${T.bal}</span><span style="font-weight:700;color:var(--green-soft)">${S.money(t.balance)}</span></div>`
-      : p.q.dep ? `<div class="row" style="padding:10px 12px;border-radius:14px;background:rgba(34,211,238,0.16)"><span style="font-size:13px">${T.dep} (${p.q.dep}%)</span><span style="font-weight:700;color:var(--cyan-soft)">${S.money(t.deposit)}</span></div>` : ''}
-    </div>
-    ${p.q.terms ? `<div class="card g"><span class="label v">${T.terms}</span><p class="small muted" style="line-height:1.5">${esc(p.q.terms)}</p></div>` : ''}
+    <div class="row no-print" style="justify-content:flex-end"><button class="chip gray" id="lng" style="border:1px solid var(--glass-border);padding:8px 12px;font-size:12px;cursor:pointer;color:#fff">${L === 'en' ? 'Ver en español' : 'View in English'}</button></div>
+    ${docHTML(p, L)}
     <div class="no-print list">
-    ${inv ? (p.q.pay && t.balance > 0 ? `<a class="btn green" href="${esc(p.q.pay)}" target="_blank" rel="noopener">${I.card} ${T.pay} · ${S.money(t.balance)}</a>` : '')
+    ${inv ? (q.pay && t.balance > 0 ? `<a class="btn green" href="${esc(q.pay)}" target="_blank" rel="noopener">${I.card} ${T.pay} · ${S.money(t.balance)}</a>` : '')
+    : q.wo ? `<div class="card g" style="background:rgba(110,231,183,0.14)"><span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} ${T.approved}</span><span class="small muted">${T.wo} #${q.wo}</span></div>`
     : pubApproved ? `
-      <div class="card g" style="background:rgba(110,231,183,0.14)"><span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} ${T.approved}</span><span class="small muted">${T.thanks}</span></div>
-      ${p.b.p ? `<a class="btn secondary" id="ntf" target="_blank" rel="noopener" href="https://wa.me/${usPhone(p.b.p)}?text=${encodeURIComponent(`${L === 'es' ? 'Apruebo la cotización' : 'I approve estimate'} #${p.q.n} – ${pubApproved}`)}">${I.whatsapp} ${T.notify}</a>` : ''}
-      ${p.q.pay && p.q.dep ? `<a class="btn green" href="${esc(p.q.pay)}" target="_blank" rel="noopener">${I.card} ${T.payDep} · ${S.money(t.deposit)}</a>` : ''}`
-    : `<div class="card g"><label for="sig" class="small muted">${T.sign}</label>
-        <input id="sig" class="sig" autocomplete="name" placeholder="${esc(p.q.client || 'Your name')}">
+      <div class="card g" style="background:rgba(110,231,183,0.14)"><span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} ${T.approved}</span>
+        <span class="sig" style="font-size:24px">${esc(pubApproved)}</span><span class="small muted">${T.confirmNote}</span></div>
+      ${p.b.p ? `<a class="btn primary" target="_blank" rel="noopener" href="https://wa.me/${usPhone(p.b.p)}?text=${encodeURIComponent(confirmMsg)}">${I.whatsapp} ${T.confirm}</a>` : ''}
+      ${q.pay && q.dep ? `<a class="btn green" href="${esc(q.pay)}" target="_blank" rel="noopener">${I.card} ${T.payDep} · ${S.money(t.deposit)}</a>` : ''}`
+    : `<div class="card g"><span class="label">${T.accept}</span><label for="sig" class="small muted">${T.sign}</label>
+        <input id="sig" class="sig" autocomplete="name" placeholder="${esc(q.client || 'Your name')}">
         <span class="small muted">${T.signNote}</span></div>
       <button class="btn primary" id="appr">${I.check} ${T.approve}</button>`}
     </div>
     <p class="small muted" style="text-align:center">${T.sent}</p>`;
-  $app.querySelector('#lng').onclick = () => { pubLang = L === 'en' ? 'es' : 'en'; route(); };
+  lng.onclick = () => { pubLang = L === 'en' ? 'es' : 'en'; route(); };
   const ap = $app.querySelector('#appr');
   if (ap) ap.onclick = () => {
     const v = sig.value.trim();
-    if (!v) { toast(T.needName); sig.focus(); return; }
+    if (v.length < 3) { toast(T.needName); sig.focus(); return; }
     pubApproved = v;
     route();
   };
@@ -775,15 +1207,19 @@ let route = function () {
   if (h !== lastHash) window.scrollTo(0, 0);
   lastHash = h;
   if (page === 'c' && arg) return viewPublic(arg, extra === 'print');
+  if (page === 'ok' && db.onboarded) return viewApprove(arg, extra);
   if (!db.onboarded) {
     if (page === 'register') return viewRegister();
     return viewWelcome();
   }
   switch (page) {
     case 'new': return viewNew();
-    case 'q': return viewQuote(arg);
+    case 'q': case 'doc': return viewDoc(arg);
+    case 'quote-form': return viewQuoteForm(arg, extra);
+    case 'wo': return viewWorkOrder(arg);
+    case 'works': case 'invoices': return viewWorks();
+    case 'profile': return viewProfile();
     case 'invoice': return viewInvoice(arg);
-    case 'invoices': return viewInvoices();
     case 'clients': return viewClients();
     case 'client': return viewClient(arg);
     case 'settings': return viewSettings();
