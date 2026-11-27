@@ -141,6 +141,26 @@ export const EN = {
   'Guardando foto…': 'Saving photo…', 'Fotos agregadas': 'Photos added', 'Foto agregada': 'Photo added', 'No se pudo guardar la foto': "Couldn't save the photo",
   'Tu teléfono no permite compartir fotos desde aquí': "Your phone can't share photos from here", 'Fotos enviadas al cliente': 'Photos sent to customer',
 
+  // Empleados y planillas
+  'Empleados': 'Employees', 'Planillas': 'Payroll', 'Agregar empleado': 'Add employee', 'Todos': 'All', 'Inactivos': 'Inactive',
+  'Planillas de pago': 'Payroll', 'Nuevo empleado': 'New employee', 'Ej. José Hernández': 'e.g. Jose Hernandez', 'WhatsApp / teléfono': 'WhatsApp / phone',
+  'Oficio / puesto': 'Trade / position', 'Ej. Pintor': 'e.g. Painter', 'Forma de pago': 'Payment method', 'Tarifa ($)': 'Rate ($)', 'Notas': 'Notes',
+  'Por trabajo': 'Per job', 'Por día': 'Per day', 'Por hora': 'Per hour', 'Empleado activo': 'Active employee', 'Guardar empleado': 'Save employee',
+  'Pagado': 'Paid', 'Por pagar': 'To pay', 'Pendiente': 'Pending', 'Al día': 'Up to date', 'Trabajos asignados': 'Assigned jobs', 'Sin trabajos asignados todavía.': 'No assigned jobs yet.',
+  'Escribe el nombre del empleado': "Enter the employee's name", 'Empleado guardado': 'Employee saved', 'Empleados y planillas': 'Employees & payroll',
+  'Todavía no tienes empleados.': "You don't have employees yet.", 'Agrégalos para asignarles órdenes de trabajo y hacerles su planilla de pago.': 'Add them to assign work orders and run their payroll.',
+  'Empleados asignados': 'Assigned employees', 'Enviar orden al empleado': 'Send work order to employee', 'Quitar empleado': 'Remove employee', 'Monto a pagar': 'Amount to pay',
+  'Asigna uno o varios empleados para realizar esta orden.': 'Assign one or more employees to do this job.', 'Empleado': 'Employee', 'Elegir…': 'Choose…', 'Monto ($)': 'Amount ($)',
+  'Asignar empleado': 'Assign employee', 'Agregar otro empleado': 'Add another employee', 'Agregar empleados': 'Add employees', 'Mano de obra (empleados)': 'Labor (employees)',
+  'Ganancia estimada': 'Estimated profit', '(antes de materiales)': '(before materials)', 'Crear planilla de pago': 'Create payroll',
+  'La planilla de pago se crea sola cuando marques el trabajo como terminado.': 'Payroll is created automatically when you mark the job as completed.',
+  'Elige un empleado': 'Choose an employee', 'Empleado asignado': 'Employee assigned', '¿Quitar este empleado de la orden?': 'Remove this employee from the work order?',
+  'Planilla de pago creada': 'Payroll created', 'Pendiente de pagar': 'Pending payment', 'Planilla pagada': 'Payroll paid', 'Recibo de pago (PDF)': 'Payment receipt (PDF)',
+  'Pagar': 'Pay', 'Ver orden de trabajo': 'View work order', 'Pago registrado. Genera el recibo.': 'Payment recorded. Create the receipt.',
+  '¿Registrar el pago a todos los empleados pendientes?': 'Record payment for all pending employees?', 'Planilla pagada': 'Payroll paid', 'Recibo enviado': 'Receipt sent',
+  'Total pendiente de pagar a empleados': 'Total owed to employees', 'No hay planillas aquí. Se crean al terminar una orden de trabajo con empleados asignados.': 'No payroll here. It is created when a work order with assigned employees is completed.',
+  'Transferencia': 'Bank transfer', 'Cash App': 'Cash App', 'Venmo': 'Venmo',
+
   // PDF
   'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
 };
@@ -187,5 +207,25 @@ export const PATTERNS = [
   [/^Se creó la orden de trabajo #(\d+)(?: · firmada por (.+))?$/, (m, n, s) => `Work order #${n} was created${s ? ' · signed by ' + s : ''}`],
   [/^Ya existía la orden de trabajo #(\d+)(?: · firmada por (.+))?$/, (m, n, s) => `Work order #${n} already existed${s ? ' · signed by ' + s : ''}`],
   [/^Creada (.+)$/, 'Created $1'],
-  [/^Inicio (.+)$/, 'Start $1']
+  [/^Inicio (.+)$/, 'Start $1'],
+  [/^(\d+) activos$/, '$1 active'],
+  [/^Activos · (\d+)$/, 'Active · $1'],
+  [/^(\d+) en obra$/, '$1 on a job'],
+  [/^(\d+) trabajos$/, '$1 jobs'],
+  [/^Por pagar (\$.+)$/, 'To pay $1'],
+  [/^Pendiente (\$.+)$/, 'Pending $1'],
+  [/^Pagado (\$.+)$/, 'Paid $1'],
+  [/^(\$[\d,.]+) · por trabajo$/, '$1 · per job'],
+  [/^(\$[\d,.]+) · por día$/, '$1 · per day'],
+  [/^(\$[\d,.]+) · por hora$/, '$1 · per hour'],
+  [/^por trabajo$/, 'per job'], [/^por día$/, 'per day'], [/^por hora$/, 'per hour'],
+  [/^Planilla de pago #(\d+) creada$/, 'Payroll #$1 created'],
+  [/^Planilla de pago #(\d+)$/, 'Payroll #$1'],
+  [/^Planilla #(\d+)$/, 'Payroll #$1'],
+  [/^Pagar a empleados \(planilla #(\d+)\)$/, 'Pay employees (payroll #$1)'],
+  [/^Pagar a todos \((.+)\)$/, 'Pay everyone ($1)'],
+  [/^Recibo #(\d+)$/, 'Receipt #$1'],
+  [/^Asignado a (.+)$/, 'Assigned to $1'],
+  [/^Orden enviada a (.+)$/, 'Work order sent to $1'],
+  [/^Pago a (.+): (\$[\d,.]+) \((.+)\)$/, (m, n, a, me) => `Paid ${n}: ${a} (${({ Efectivo: 'Cash', Transferencia: 'Bank transfer', Cheque: 'Check', Otro: 'Other' })[me] || me})`]
 ];

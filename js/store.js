@@ -35,7 +35,10 @@ const defaults = () => ({
   clients: [],
   quotes: [],
   nextNumber: 1001,
-  nextWO: 2001
+  nextWO: 2001,
+  employees: [],
+  nextPayroll: 3001,
+  nextReceipt: 5001
 });
 
 let db = load();
@@ -169,6 +172,7 @@ export function createWorkOrder(id, signature, via) {
       number: db.nextWO++,
       createdAt: Date.now(),
       progress: 0,
+      crew: [],
       stages: STAGES.map((label, i) => ({ label, done: i === 0, t: i === 0 ? Date.now() : null })),
       updates: [{ t: Date.now(), text: 'Orden de trabajo creada. Pronto te contactamos para programar.', pct: 0 }]
     };
@@ -193,6 +197,7 @@ export function setStage(id, idx, done) {
   if (done && idx === q.wo.stages.length - 1) q.wo.progress = 100;
   if (done) q.wo.updates.push({ t: Date.now(), text: st.label, pct: q.wo.progress });
   if (q.wo.progress >= 100 && !q.completedAt) q.completedAt = Date.now();
+  if (q.wo.progress >= 100 && q.wo.crew?.length && !q.payroll) createPayroll(q.id);
   save();
 }
 
@@ -201,6 +206,7 @@ export function setProgress(id, pct) {
   if (!q?.wo) return;
   q.wo.progress = Math.max(0, Math.min(100, Number(pct) || 0));
   if (q.wo.progress >= 100 && !q.completedAt) q.completedAt = Date.now();
+  if (q.wo.progress >= 100 && q.wo.crew?.length && !q.payroll) createPayroll(q.id);
   save();
 }
 
@@ -224,6 +230,100 @@ export function ensureInvoice(id) {
   if (q.status === 'approved' || q.status === 'draft' || q.status === 'sent') q.status = totals(q).balance <= 0.005 ? 'paid' : 'invoiced';
   save();
   return q;
+}
+
+/* ---------- Empleados ---------- */
+export const employees = () => db.employees || (db.employees = []);
+export const getEmployee = (id) => employees().find((e) => e.id === id);
+
+export function upsertEmployee(e) {
+  if (e.id) {
+    const i = employees().findIndex((x) => x.id === e.id);
+    if (i >= 0) db.employees[i] = { ...db.employees[i], ...e };
+  } else {
+    e = { id: uid(), createdAt: Date.now(), active: true, ...e };
+    employees().push(e);
+  }
+  save();
+  return e;
+}
+
+// Equipo asignado a una orden de trabajo
+export function assignEmployee(qid, empId, amount, note) {
+  const q = getQuote(qid);
+  if (!q?.wo) return;
+  q.wo.crew = q.wo.crew || [];
+  if (q.wo.crew.some((c) => c.empId === empId)) return;
+  const e = getEmployee(empId);
+  q.wo.crew.push({ empId, amount: Number(amount) || 0, note: note || '', at: Date.now() });
+  q.history.push({ t: Date.now(), text: `Asignado a ${e?.name || 'empleado'}` });
+  syncPayroll(q);
+  save();
+}
+
+export function updateAssignment(qid, empId, patch) {
+  const q = getQuote(qid);
+  const c = q?.wo?.crew?.find((x) => x.empId === empId);
+  if (!c) return;
+  Object.assign(c, patch);
+  syncPayroll(q);
+  save();
+}
+
+export function unassignEmployee(qid, empId) {
+  const q = getQuote(qid);
+  if (!q?.wo?.crew) return;
+  if (q.payroll?.lines.some((l) => l.empId === empId && l.paid)) return false;
+  q.wo.crew = q.wo.crew.filter((c) => c.empId !== empId);
+  syncPayroll(q);
+  save();
+  return true;
+}
+
+export const laborCost = (q) => (q?.wo?.crew || []).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+
+/* ---------- Planilla de pago ---------- */
+export function createPayroll(qid) {
+  const q = getQuote(qid);
+  if (!q?.wo?.crew?.length) return null;
+  if (!q.payroll) {
+    q.payroll = { number: db.nextPayroll++, createdAt: Date.now(), lines: [] };
+    q.history.push({ t: Date.now(), text: `Planilla de pago #${q.payroll.number} creada` });
+  }
+  syncPayroll(q, true);
+  save();
+  return q.payroll;
+}
+
+// Mantiene la planilla igual al equipo asignado (sin tocar pagos ya hechos)
+function syncPayroll(q, force) {
+  if (!q.payroll && !force) return;
+  if (!q.payroll) return;
+  const crew = q.wo?.crew || [];
+  const lines = q.payroll.lines;
+  for (const c of crew) {
+    const e = getEmployee(c.empId);
+    const l = lines.find((x) => x.empId === c.empId);
+    if (!l) lines.push({ empId: c.empId, name: e?.name || '', role: e?.role || '', amount: Number(c.amount) || 0, paid: false });
+    else if (!l.paid) Object.assign(l, { name: e?.name || l.name, role: e?.role || l.role, amount: Number(c.amount) || 0 });
+  }
+  q.payroll.lines = lines.filter((l) => l.paid || crew.some((c) => c.empId === l.empId));
+}
+
+export function payPayrollLine(qid, empId, method) {
+  const q = getQuote(qid);
+  const l = q?.payroll?.lines.find((x) => x.empId === empId);
+  if (!l || l.paid) return null;
+  Object.assign(l, { paid: true, paidAt: Date.now(), method, receipt: db.nextReceipt++ });
+  q.history.push({ t: Date.now(), text: `Pago a ${l.name}: ${money(l.amount)} (${method})` });
+  save();
+  return l;
+}
+
+export function payrollTotals(p) {
+  const total = (p?.lines || []).reduce((s, l) => s + l.amount, 0);
+  const paid = (p?.lines || []).filter((l) => l.paid).reduce((s, l) => s + l.amount, 0);
+  return { total, paid, pending: Math.round((total - paid) * 100) / 100 };
 }
 
 /* ---------- Cálculos ---------- */

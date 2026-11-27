@@ -29,6 +29,7 @@ const L10N = {
 
 const d = (t, L) => t ? new Date(typeof t === 'string' && t.length === 10 ? t + 'T12:00' : t).toLocaleDateString(L === 'es' ? 'es-US' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 // jsPDF con fuentes estándar no dibuja algunos símbolos: se limpian
+const fileSafe = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '-');
 const clean = (s) => String(s ?? '').replace(/[–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[^\x00-\xFF]/g, '');
 
 export async function buildInvoicePdf(q) {
@@ -203,7 +204,7 @@ export async function buildInvoicePdf(q) {
     }
   }
 
-  const name = `${L === 'es' ? 'Factura' : 'Invoice'}-${q.number}-${clean(c.name || 'cliente').replace(/\s+/g, '-')}.pdf`;
+  const name = fileSafe(`${L === 'es' ? 'Factura' : 'Invoice'}-${q.number}-${c.name || 'cliente'}`) + '.pdf';
   return { blob: doc.output('blob'), name };
 }
 
@@ -225,6 +226,101 @@ export async function shareInvoicePdf(q, message) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return 'downloaded';
+}
+
+/* ---------- Recibo de pago para el empleado ---------- */
+const RL = {
+  es: { title: 'RECIBO DE PAGO', no: 'Recibo #', date: 'Fecha', payroll: 'Planilla #', wo: 'Orden de trabajo #', emp: 'EMPLEADO', job: 'TRABAJO REALIZADO',
+    concept: 'Concepto', conceptTxt: (q) => `Pago por trabajo realizado${q.title ? ': ' + q.title : ''}`, amount: 'Monto pagado', method: 'Forma de pago',
+    received: 'Recibí conforme', delivered: 'Entregado por', note: 'Este recibo confirma el pago completo por el trabajo indicado.', completed: 'Terminado', phone: 'Tel.' },
+  en: { title: 'PAYMENT RECEIPT', no: 'Receipt #', date: 'Date', payroll: 'Payroll #', wo: 'Work order #', emp: 'EMPLOYEE', job: 'WORK PERFORMED',
+    concept: 'Description', conceptTxt: (q) => `Payment for work performed${q.title ? ': ' + q.title : ''}`, amount: 'Amount paid', method: 'Payment method',
+    received: 'Received by', delivered: 'Paid by', note: 'This receipt confirms full payment for the work described.', completed: 'Completed', phone: 'Phone' }
+};
+const METHOD_EN = { Efectivo: 'Cash', Transferencia: 'Bank transfer', Cheque: 'Check', Zelle: 'Zelle', 'Cash App': 'Cash App', Venmo: 'Venmo', Otro: 'Other' };
+
+export async function buildReceiptPdf(q, line) {
+  const jsPDF = await loadJsPDF();
+  const s = S.settings();
+  const emp = S.getEmployee(line.empId) || {};
+  const c = S.getClient(q.clientId) || {};
+  const L = s.appLang === 'en' ? 'en' : 'es';
+  const T = RL[L];
+  const doc = new jsPDF({ unit: 'pt', format: [612, 560] });
+  const W = doc.internal.pageSize.getWidth();
+  const M = 44;
+  const ink = [17, 24, 39], muted = [100, 110, 125], accent = [8, 145, 178], line_ = [225, 229, 236];
+  let y = M;
+
+  doc.setFillColor(10, 15, 31); doc.rect(0, 0, W, 8, 'F');
+  doc.setFillColor(110, 231, 183); doc.rect(0, 8, W / 2, 3, 'F');
+  doc.setFillColor(103, 232, 249); doc.rect(W / 2, 8, W / 2, 3, 'F');
+
+  let x = M;
+  if (s.logo) { try { doc.addImage(s.logo, 'JPEG', M, y, 46, 46); x = M + 58; } catch (e) { /* sin logo */ } }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...ink);
+  doc.text(clean(s.bizName || ''), x, y + 14);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...muted);
+  [[s.address, s.city, s.state].filter(Boolean).join(', '), [s.phone, s.email].filter(Boolean).join('  |  ')].filter(Boolean)
+    .forEach((l, i) => doc.text(clean(l), x, y + 27 + i * 11));
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(5, 150, 105);
+  doc.text(T.title, W - M, y + 16, { align: 'right' });
+  doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+  [[T.no, String(line.receipt || '')], [T.date, d(line.paidAt || Date.now(), L)], [T.payroll, String(q.payroll?.number || '')], [T.wo, String(q.wo?.number || '')]]
+    .forEach(([k, v], i) => { doc.setTextColor(...muted); doc.text(k, W - M - 80, y + 32 + i * 12, { align: 'right' }); doc.setTextColor(...ink); doc.text(clean(v), W - M, y + 32 + i * 12, { align: 'right' }); });
+  y += 92;
+
+  doc.setDrawColor(...line_); doc.line(M, y, W - M, y); y += 20;
+  const colW = (W - 2 * M) / 2;
+  doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...accent);
+  doc.text(T.emp, M, y); doc.text(T.job, M + colW, y);
+  doc.setFontSize(10.5); doc.setTextColor(...ink);
+  doc.text(clean(line.name || emp.name || ''), M, y + 15);
+  doc.text(clean(q.title || '-'), M + colW, y + 15);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...muted);
+  [emp.role || line.role, emp.phone ? `${T.phone} ${emp.phone}` : ''].filter(Boolean).forEach((l, i) => doc.text(clean(l), M, y + 29 + i * 12));
+  [c.name, q.jobAddress || c.address, q.completedAt ? `${T.completed}: ${d(q.completedAt, L)}` : ''].filter(Boolean)
+    .forEach((l, i) => doc.text(clean(l), M + colW, y + 29 + i * 12));
+  y += 78;
+
+  doc.setFillColor(241, 245, 249); doc.roundedRect(M, y, W - 2 * M, 92, 8, 8, 'F');
+  doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...muted);
+  doc.text(T.concept.toUpperCase(), M + 16, y + 22);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...ink);
+  const conc = doc.splitTextToSize(clean(T.conceptTxt(q) + (line.note ? ` (${line.note})` : '')), W - 2 * M - 200);
+  doc.text(conc, M + 16, y + 38);
+  doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...muted);
+  doc.text(T.amount.toUpperCase(), W - M - 16, y + 22, { align: 'right' });
+  doc.setFontSize(24); doc.setTextColor(5, 150, 105);
+  doc.text(S.money(line.amount), W - M - 16, y + 50, { align: 'right' });
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...muted);
+  doc.text(clean(`${T.method}: ${L === 'en' ? (METHOD_EN[line.method] || line.method) : line.method}`), W - M - 16, y + 72, { align: 'right' });
+  y += 120;
+
+  doc.setFontSize(8.5); doc.setTextColor(...muted);
+  doc.text(clean(T.note), M, y); y += 60;
+  doc.setDrawColor(...ink);
+  doc.line(M, y, M + 200, y); doc.line(W - M - 200, y, W - M, y);
+  doc.setFontSize(9); doc.setTextColor(...ink);
+  doc.text(clean(`${T.received}: ${line.name || ''}`), M, y + 14);
+  doc.text(clean(`${T.delivered}: ${s.owner || s.bizName || ''}`), W - M - 200, y + 14);
+
+  const name = fileSafe(`${L === 'es' ? 'Recibo' : 'Receipt'}-${line.receipt}-${line.name || 'empleado'}`) + '.pdf';
+  return { blob: doc.output('blob'), name };
+}
+
+export async function shareReceiptPdf(q, line, message) {
+  const { blob, name } = await buildReceiptPdf(q, line);
+  const file = new File([blob], name, { type: 'application/pdf' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name, text: message }); return 'shared'; } catch (e) { if (e.name === 'AbortError') return 'cancelled'; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   return 'downloaded';
 }

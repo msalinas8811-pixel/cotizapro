@@ -13,7 +13,10 @@ App (PWA) de cotizaciones y facturas para oficios en EE.UU.: pintores, limpieza,
 5. **Orden de trabajo**: la aprobación llega por WhatsApp con un link. Al tocarlo en el teléfono del negocio, la orden se crea sola.
 6. **Seguimiento de la obra**: etapas (visita, materiales, en progreso, revisión, terminado), porcentaje de avance y notas. El cliente recibe un link de seguimiento por WhatsApp cada vez que hay un avance.
 7. **Fotos del antes y después (opcional)**: con la cámara o desde la galería, en la cotización o en la orden de trabajo. Se comprimen y se guardan en el teléfono, se pueden mandar al cliente y salen en una página aparte de la factura PDF.
-8. **Factura final en PDF**: al terminar el trabajo se genera la factura en PDF (archivo real) con datos de la empresa, del cliente, partidas, pagos recibidos y saldo, lista para mandarla por WhatsApp o correo. Si está pagada, lleva el sello *PAID / PAGADA*.
+8. **Empleados**: lista de empleados con WhatsApp, oficio, forma de pago (por trabajo, por día o por hora) y tarifa.
+9. **Asignar la orden**: en cada orden de trabajo se asignan uno o varios empleados con el monto a pagar a cada uno. La app calcula la mano de obra y la ganancia estimada, y manda la orden al empleado por WhatsApp.
+10. **Planilla de pago**: al terminar la obra se crea sola la planilla con los empleados y sus montos. Se registra el pago de cada uno (efectivo, transferencia, Zelle, Cash App, Venmo, cheque) y se genera su **recibo de pago en PDF** con firmas de recibido.
+11. **Factura final en PDF**: al terminar el trabajo se genera la factura en PDF (archivo real) con datos de la empresa, del cliente, partidas, pagos recibidos y saldo, lista para mandarla por WhatsApp o correo. Si está pagada, lleva el sello *PAID / PAGADA*.
 
 ## Dos idiomas
 

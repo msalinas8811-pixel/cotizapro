@@ -2,7 +2,7 @@
 import * as S from './store.js';
 import { parseDictation } from './parser.js';
 import { I } from './icons.js';
-import { shareInvoicePdf } from './pdf.js';
+import { shareInvoicePdf, shareReceiptPdf } from './pdf.js';
 import { COUNTRIES, US_STATES, countryName, stateCode } from './geo.js';
 import { tr, translateDOM, watch } from './i18n.js';
 import { addPhotos, deletePhotos, photoURL, photoFiles } from './photos.js';
@@ -312,6 +312,7 @@ function viewHome() {
   const owedN = qs.filter((q) => ['approved', 'invoiced'].includes(q.status) && S.totals(q).balance > 0).length;
   const paidMonth = qs.reduce((a, q) => a + (q.payments || []).filter((p) => p.t >= monthStart).reduce((x, p) => x + p.amount, 0), 0);
   const pending = qs.filter((q) => q.status !== 'paid').slice(0, 6);
+  const payPending = qs.filter((q) => q.payroll).reduce((s, q) => s + S.payrollTotals(q.payroll).pending, 0);
   const month = now.toLocaleDateString(UI() === 'en' ? 'en-US' : 'es-US', { month: 'short' });
   $app.innerHTML = `
     <div class="row">
@@ -326,6 +327,10 @@ function viewHome() {
       <span style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;flex-shrink:0">${I.mic(26, '#0A0F1F')}</span>
       <span class="col"><span class="display" style="font-size:18px;font-weight:700">Cotizar servicio</span><span style="font-size:13px;color:rgba(255,255,255,0.84)">Formulario o dictado por voz</span></span>
     </a>
+    <div class="grid2">
+      <a href="#/employees" class="item g" style="flex-direction:column;align-items:flex-start;gap:6px"><span style="color:var(--cyan)">${I.users}</span><span style="font-weight:600">Empleados</span><span class="small muted">${S.employees().filter((e) => e.active !== false).length} activos</span></a>
+      <a href="#/payrolls" class="item g" style="flex-direction:column;align-items:flex-start;gap:6px"><span style="color:var(--green)">${I.card}</span><span style="font-weight:600">Planillas</span><span class="small muted">${payPending ? 'Por pagar ' + S.money(payPending) : 'Al día'}</span></a>
+    </div>
     <div class="row"><h2>Pendientes</h2><a href="#/works" style="font-size:13px">Ver todo</a></div>
     <div class="list">${pending.length ? pending.map((q) => quoteRow(q)).join('') : `<div class="empty g card"><span>Aún no tienes cotizaciones.</span><br><span>Toca Cotizar servicio para hacer tu primera cotización.</span></div>`}</div>`;
 }
@@ -765,6 +770,7 @@ function viewProfile() {
     <div data-noi18n>${profileHTML(b, UI(), false)}</div>
     <a class="btn primary" href="#/quote-form">${I.tool} Cotizar servicio</a>
     <button class="btn secondary" id="shp">${I.share} Compartir perfil con un cliente</button>
+    <a class="btn secondary" href="#/employees">${I.users} Empleados y planillas</a>
     <a class="btn secondary" href="#/settings">${I.gear} Editar perfil y ajustes</a>`;
   shp.onclick = async () => {
     const url = `${appBase()}#/c/${S.encodeShare({ v: 2, kind: 'profile', b: bizInfo(true), lang: S.settings().clientLang })}`;
@@ -1214,9 +1220,11 @@ function viewWorkOrder(id) {
       <label for="pct" class="vh">Porcentaje de avance</label>
       <input id="pct" type="range" min="0" max="100" step="5" value="${w.progress}" style="min-height:32px;padding:0;accent-color:#67E8F9;border:none;background:transparent">
     </div>
+    ${crewCardHTML(q)}
     ${w.progress >= 100 ? `<div class="card g" style="background:linear-gradient(135deg,rgba(110,231,183,0.22),rgba(103,232,249,0.18));gap:10px">
       <span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} Trabajo terminado${q.completedAt ? ' · ' + fullDate(q.completedAt, UI()) : ''}</span>
       <span class="small muted">Genera la factura final en PDF y envíala al cliente por WhatsApp o correo.</span>
+      ${q.payroll ? `<a class="btn secondary" href="#/payroll/${q.id}">${I.users} Pagar a empleados (planilla #${q.payroll.number})</a>` : ''}
       <button class="btn green" id="finpdf">${I.print} Factura final en PDF</button>
       <a class="btn secondary" href="#/invoice/${q.id}">${I.card} Registrar pagos</a>
     </div>` : ''}
@@ -1246,6 +1254,7 @@ function viewWorkOrder(id) {
   $app.querySelectorAll('[data-stage]').forEach((cb) => cb.addEventListener('change', () => { S.setStage(q.id, Number(cb.dataset.stage), cb.checked); route(); }));
   uf.addEventListener('submit', (e) => { e.preventDefault(); if (!ut.value.trim()) { toast('Escribe el avance'); return; } S.addUpdate(q.id, ut.value); toast('Avance guardado. Envíalo al cliente.'); route(); });
   hydratePhotos($app);
+  bindCrew(q);
   const phState = photoList(q);
   bindPhotoEditor($app.querySelector('#phbox'), phState, (st) => {
     const had = hasPhotos(q);
@@ -1288,6 +1297,260 @@ function viewTrack(p, L) {
     ${b.p ? `<a class="btn primary" target="_blank" rel="noopener" href="https://wa.me/${usPhone(b.p)}?text=${encodeURIComponent((L === 'es' ? 'Hola, sobre la orden de trabajo #' : 'Hi, about work order #') + w.n)}">${I.whatsapp} ${T.contact}</a>` : ''}
     <p class="small muted" style="text-align:center">${T.sent}</p>`;
   lng.onclick = () => { pubLang = L === 'en' ? 'es' : 'en'; route(); };
+}
+
+/* ---------- Empleados ---------- */
+const PAY_TYPES = [['job', 'Por trabajo'], ['day', 'Por día'], ['hour', 'Por hora']];
+const PAY_METHODS = ['Efectivo', 'Transferencia', 'Zelle', 'Cash App', 'Venmo', 'Cheque', 'Otro'];
+const payTypeLabel = (t) => (PAY_TYPES.find((x) => x[0] === t) || PAY_TYPES[0])[1];
+const rateText = (e) => e.rate ? `${S.money(e.rate)} · ${payTypeLabel(e.payType).toLowerCase()}` : payTypeLabel(e.payType);
+
+function empStats(empId) {
+  let jobs = 0, paid = 0, pending = 0, active = 0;
+  for (const q of S.quotes()) {
+    const c = q.wo?.crew?.find((x) => x.empId === empId);
+    if (!c) continue;
+    jobs++;
+    if (q.wo.progress < 100) active++;
+    const l = q.payroll?.lines.find((x) => x.empId === empId);
+    if (l?.paid) paid += l.amount; else pending += Number(c.amount) || 0;
+  }
+  return { jobs, paid, pending, active };
+}
+
+let empFilter = 'active';
+function viewEmployees() {
+  setTabs(null);
+  const all = S.employees();
+  const list = all.filter((e) => (empFilter === 'active' ? e.active !== false : empFilter === 'inactive' ? e.active === false : true));
+  const pill = (k, label) => `<button class="pill" data-f="${k}" aria-pressed="${empFilter === k}">${label}</button>`;
+  $app.innerHTML = `
+    ${topbar('Empleados', '#/home', `<a class="icon-btn primary" href="#/employee/new" aria-label="Agregar empleado">${I.plus}</a>`)}
+    <div class="pills">${pill('active', 'Activos · ' + all.filter((e) => e.active !== false).length)}${pill('inactive', 'Inactivos')}${pill('all', 'Todos')}</div>
+    <div class="list">${list.length ? list.map((e) => {
+      const st = empStats(e.id);
+      return `<a class="item g" href="#/employee/${e.id}">
+        <span class="avatar" style="background:${colorFor(e.name)}">${esc(initials(e.name))}</span>
+        <span class="col" style="flex-grow:1"><span style="font-size:15px;font-weight:600" data-noi18n>${esc(e.name)}</span>
+          <span class="small muted"><span data-noi18n>${esc(e.role || '')}${e.role ? ' · ' : ''}</span><span>${rateText(e)}</span></span></span>
+        <span class="col" style="align-items:flex-end;gap:4px">${st.active ? `<span class="chip cyan">${st.active} en obra</span>` : ''}${st.pending ? `<span class="chip orange">Por pagar ${S.money(st.pending)}</span>` : ''}</span></a>`;
+    }).join('') : `<div class="empty g card"><span>Todavía no tienes empleados.</span><br><span>Agrégalos para asignarles órdenes de trabajo y hacerles su planilla de pago.</span></div>`}</div>
+    <a class="btn primary" href="#/employee/new">${I.plus} Agregar empleado</a>
+    <a class="btn secondary" href="#/payrolls">${I.file} Planillas de pago</a>`;
+  $app.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { empFilter = b.dataset.f; route(); });
+}
+
+function viewEmployee(id) {
+  setTabs(null);
+  const isNew = id === 'new';
+  const e = isNew ? { name: '', phone: '', role: '', payType: 'job', rate: '', active: true, notes: '' } : S.getEmployee(id);
+  if (!e) return go('#/employees');
+  const st = isNew ? null : empStats(e.id);
+  const jobs = isNew ? [] : S.quotes().filter((q) => q.wo?.crew?.some((c) => c.empId === e.id));
+  $app.innerHTML = `
+    ${topbar(isNew ? 'Nuevo empleado' : e.name, '#/employees')}
+    ${st ? `<div class="grid2">
+      <div class="card g"><span class="small muted">Pagado</span><span class="big">${S.money(st.paid)}</span><span class="small muted">${st.jobs} trabajos</span></div>
+      <div class="card g"><span class="small muted">Por pagar</span><span class="big" style="color:${st.pending ? 'var(--orange-soft)' : '#fff'}">${S.money(st.pending)}</span><span class="small muted">${st.active} en obra</span></div>
+    </div>` : ''}
+    <form class="card g" id="ef">
+      <div class="field"><label for="en">Nombre completo *</label><input id="en" required value="${esc(e.name)}" placeholder="Ej. José Hernández"></div>
+      <div class="grid2">
+        <div class="field"><label for="ep">WhatsApp / teléfono</label><input id="ep" type="tel" value="${esc(e.phone)}" placeholder="(713) 555-0100"></div>
+        <div class="field"><label for="er">Oficio / puesto</label><input id="er" value="${esc(e.role)}" placeholder="Ej. Pintor"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="et">Forma de pago</label><select id="et">${PAY_TYPES.map(([k, l]) => `<option value="${k}" ${k === e.payType ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label for="erate">Tarifa ($)</label><input id="erate" type="number" min="0" step="0.01" inputmode="decimal" value="${esc(e.rate)}" placeholder="Opcional"></div>
+      </div>
+      <div class="field"><label for="enotes">Notas</label><textarea id="enotes" rows="2" style="min-height:70px" placeholder="Opcional">${esc(e.notes || '')}</textarea></div>
+      <label class="row g" style="min-height:52px;border-radius:14px;padding:0 14px;cursor:pointer"><span style="font-size:14px">Empleado activo</span><input id="eact" type="checkbox" ${e.active !== false ? 'checked' : ''}></label>
+      <button class="btn primary" type="submit">${isNew ? 'Guardar empleado' : 'Guardar cambios'}</button>
+    </form>
+    ${isNew ? '' : `
+      ${e.phone ? `<a class="btn secondary" target="_blank" rel="noopener" href="https://wa.me/${usPhone(e.phone)}">${I.whatsapp} WhatsApp</a>` : ''}
+      <h2>Trabajos asignados</h2>
+      <div class="list">${jobs.length ? jobs.map((q) => {
+        const c = q.wo.crew.find((x) => x.empId === e.id);
+        const l = q.payroll?.lines.find((x) => x.empId === e.id);
+        return `<a class="item g" href="#/wo/${q.id}"><span class="col" style="flex-grow:1"><span style="font-size:15px;font-weight:600" data-noi18n>${esc(q.title || 'Trabajo')}</span>
+          <span class="small muted"><span>Orden de trabajo #${q.wo.number}</span><span data-noi18n> · ${esc(clientName(q))}</span></span></span>
+          <span class="col" style="align-items:flex-end;gap:4px"><span style="font-weight:700">${S.money(c.amount)}</span>${l?.paid ? '<span class="chip green">Pagado</span>' : q.wo.progress >= 100 ? '<span class="chip orange">Por pagar</span>' : `<span class="chip cyan">En obra · ${q.wo.progress}%</span>`}</span></a>`;
+      }).join('') : '<div class="empty g card">Sin trabajos asignados todavía.</div>'}</div>`}`;
+  ef.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if (!en.value.trim()) { toast('Escribe el nombre del empleado'); return; }
+    const saved = S.upsertEmployee({ ...(isNew ? {} : { id: e.id }), name: en.value.trim(), phone: ep.value.trim(), role: er.value.trim(), payType: et.value, rate: erate.value ? Number(erate.value) : '', notes: enotes.value.trim(), active: eact.checked });
+    toast('Empleado guardado');
+    go(isNew ? '#/employees' : '#/employee/' + saved.id);
+  });
+}
+
+/* ---------- Equipo en la orden de trabajo ---------- */
+function crewCardHTML(q) {
+  const crew = q.wo.crew || [];
+  const avail = S.employees().filter((e) => e.active !== false && !crew.some((c) => c.empId === e.id));
+  const labor = S.laborCost(q);
+  const sub = S.totals(q).subtotal;
+  return `<div class="card g" id="crew">
+    <div class="row"><span class="label">Empleados asignados</span>${crew.length ? `<span class="small muted">${crew.length}</span>` : ''}</div>
+    ${crew.length ? crew.map((c) => {
+      const e = S.getEmployee(c.empId) || { name: '?' };
+      const paid = q.payroll?.lines.find((l) => l.empId === c.empId)?.paid;
+      return `<div class="line" style="gap:10px">
+        <div class="row" style="justify-content:flex-start;gap:12px">
+          <span class="avatar" style="width:38px;height:38px;font-size:13px;background:${colorFor(e.name)}">${esc(initials(e.name))}</span>
+          <span class="col" style="flex-grow:1"><span style="font-weight:600" data-noi18n>${esc(e.name)}</span><span class="small muted" data-noi18n>${esc(e.role || '')}</span></span>
+          ${e.phone ? `<button type="button" class="icon-btn" data-wa-emp="${c.empId}" aria-label="Enviar orden al empleado" style="width:40px;height:40px">${I.whatsapp}</button>` : ''}
+          ${paid ? '' : `<button type="button" class="icon-btn" data-unassign="${c.empId}" aria-label="Quitar empleado" style="width:40px;height:40px">${I.trash}</button>`}
+        </div>
+        <div class="row" style="gap:10px">
+          <label class="small muted" for="amt_${c.empId}" style="flex-shrink:0">Monto a pagar</label>
+          <div class="prefix" style="flex-grow:1"><span>$</span><input id="amt_${c.empId}" data-amt="${c.empId}" type="number" min="0" step="0.01" inputmode="decimal" value="${c.amount || ''}" placeholder="0" ${paid ? 'disabled' : ''} style="min-height:44px"></div>
+        </div>
+        ${paid ? '<span class="chip green" style="align-self:flex-start">Pagado</span>' : ''}
+      </div>`;
+    }).join('') : '<span class="small muted">Asigna uno o varios empleados para realizar esta orden.</span>'}
+    ${avail.length ? `<div class="row" style="gap:10px;align-items:flex-end">
+        <div class="field" style="flex:1.4"><label for="addemp" class="small muted">Empleado</label><select id="addemp"><option value="">Elegir…</option>${avail.map((e) => `<option value="${e.id}" data-rate="${e.payType === 'job' && e.rate ? e.rate : ''}">${esc(e.name)}${e.role ? ' · ' + esc(e.role) : ''}</option>`).join('')}</select></div>
+        <div class="field" style="flex:1"><label for="addamt" class="small muted">Monto ($)</label><input id="addamt" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Opcional"></div>
+      </div>
+      <button type="button" class="btn secondary" id="doassign">${I.plus} Asignar empleado</button>`
+    : `<a class="btn secondary" href="#/employee/new">${I.plus} ${S.employees().length ? 'Agregar otro empleado' : 'Agregar empleados'}</a>`}
+    ${crew.length ? `<div class="sep"></div>
+      <div class="row small muted" style="font-size:13px"><span>Mano de obra (empleados)</span><span>${S.money(labor)}</span></div>
+      <div class="row" style="font-size:14px"><span>Ganancia estimada <span class="small muted">(antes de materiales)</span></span><span style="font-weight:700;color:${sub - labor >= 0 ? 'var(--green-soft)' : 'var(--orange-soft)'}">${S.money(sub - labor)}</span></div>` : ''}
+    ${q.payroll ? `<a class="btn green" href="#/payroll/${q.id}">${I.card} Planilla de pago #${q.payroll.number}</a>`
+      : crew.length && q.wo.progress >= 100 ? `<button type="button" class="btn green" id="mkpay">${I.card} Crear planilla de pago</button>`
+      : crew.length ? '<span class="small muted">La planilla de pago se crea sola cuando marques el trabajo como terminado.</span>' : ''}
+  </div>`;
+}
+
+function bindCrew(q) {
+  const box = $app.querySelector('#crew');
+  if (!box) return;
+  const sel = box.querySelector('#addemp');
+  if (sel) sel.onchange = () => { const r = sel.selectedOptions[0]?.dataset.rate; if (r) box.querySelector('#addamt').value = r; };
+  const da = box.querySelector('#doassign');
+  if (da) da.onclick = () => {
+    if (!sel.value) { toast('Elige un empleado'); return; }
+    S.assignEmployee(q.id, sel.value, box.querySelector('#addamt').value);
+    toast('Empleado asignado');
+    route();
+  };
+  box.addEventListener('change', (ev) => {
+    const inp = ev.target.closest('[data-amt]');
+    if (inp) { S.updateAssignment(q.id, inp.dataset.amt, { amount: Number(inp.value) || 0 }); route(); }
+  });
+  box.addEventListener('click', (ev) => {
+    const un = ev.target.closest('[data-unassign]');
+    if (un) { if (confirmT('¿Quitar este empleado de la orden?')) { S.unassignEmployee(q.id, un.dataset.unassign); route(); } return; }
+    const wa = ev.target.closest('[data-wa-emp]');
+    if (wa) {
+      const e = S.getEmployee(wa.dataset.waEmp);
+      const c = q.wo.crew.find((x) => x.empId === e.id);
+      const cl = S.getClient(q.clientId);
+      const en = UI() === 'en';
+      const lines = en
+        ? [`Hi ${e.name.split(' ')[0]}, you're assigned to work order #${q.wo.number}.`, `Job: ${q.title || '-'}`, `Address: ${q.jobAddress || cl?.address || '-'}`,
+           q.startDate ? `Start: ${fullDate(q.startDate, 'en')}` : '', q.duration ? `Duration: ${q.duration}` : '', q.scope ? `Scope: ${q.scope}` : '', c.amount ? `Your pay: ${S.money(c.amount)}` : '']
+        : [`Hola ${e.name.split(' ')[0]}, te asigné la orden de trabajo #${q.wo.number}.`, `Trabajo: ${q.title || '-'}`, `Dirección: ${q.jobAddress || cl?.address || '-'}`,
+           q.startDate ? `Inicio: ${fullDate(q.startDate, 'es')}` : '', q.duration ? `Duración: ${q.duration}` : '', q.scope ? `Alcance: ${q.scope}` : '', c.amount ? `Tu pago: ${S.money(c.amount)}` : ''];
+      window.open(`https://wa.me/${usPhone(e.phone)}?text=${encodeURIComponent(lines.filter(Boolean).join('\n'))}`, '_blank');
+      S.updateQuote(q.id, {}, `Orden enviada a ${e.name}`);
+    }
+  });
+  const mk = box.querySelector('#mkpay');
+  if (mk) mk.onclick = () => { S.createPayroll(q.id); toast('Planilla de pago creada'); go('#/payroll/' + q.id); };
+}
+
+/* ---------- Planillas de pago ---------- */
+function viewPayroll(id) {
+  const q = S.getQuote(id);
+  if (!q?.payroll) return go(q ? '#/wo/' + id : '#/payrolls');
+  setTabs(null);
+  const p = q.payroll;
+  const t = S.payrollTotals(p);
+  const pct = t.total ? Math.round((t.paid / t.total) * 100) : 0;
+  $app.innerHTML = `
+    ${topbar('Planilla de pago #' + p.number, '#/wo/' + q.id)}
+    <div class="card g" style="gap:10px">
+      <div class="row"><span class="col"><span style="font-size:16px;font-weight:700" data-noi18n>${esc(q.title || 'Trabajo')}</span>
+        <span class="small muted"><span>Orden de trabajo #${q.wo.number}</span><span data-noi18n> · ${esc(clientName(q))}</span></span></span>
+        ${t.pending <= 0 ? '<span class="chip green">Pagada</span>' : '<span class="chip orange">Pendiente</span>'}</div>
+      <div class="col"><span class="small muted">${t.pending > 0 ? 'Pendiente de pagar' : 'Planilla pagada'}</span><span class="huge">${S.money(t.pending > 0 ? t.pending : t.total)}</span></div>
+      <div class="bar"><div style="width:${pct}%"></div></div>
+      <div class="row small muted"><span>Pagado ${S.money(t.paid)}</span><span>Total ${S.money(t.total)}</span></div>
+      <span class="small muted">Creada ${fullDate(p.createdAt, UI())}</span>
+    </div>
+    <div class="list">${p.lines.map((l) => `
+      <div class="card g" style="gap:10px">
+        <div class="row" style="justify-content:flex-start;gap:12px">
+          <span class="avatar" style="width:42px;height:42px;background:${colorFor(l.name)}">${esc(initials(l.name))}</span>
+          <span class="col" style="flex-grow:1"><span style="font-weight:600" data-noi18n>${esc(l.name)}</span><span class="small muted" data-noi18n>${esc(l.role || '')}</span></span>
+          <span class="col" style="align-items:flex-end;gap:4px"><span class="big" style="font-size:20px">${S.money(l.amount)}</span>${l.paid ? '<span class="chip green">Pagado</span>' : '<span class="chip orange">Por pagar</span>'}</span>
+        </div>
+        ${l.paid ? `<span class="small muted"><span>Recibo #${l.receipt}</span> · <span>${fullDate(l.paidAt, UI())}</span> · <span>${esc(l.method)}</span></span>
+          <button class="btn secondary" data-receipt="${l.empId}">${I.print} Recibo de pago (PDF)</button>`
+        : `<div class="row" style="gap:10px;align-items:flex-end">
+            <div class="field" style="flex:1"><label for="m_${l.empId}" class="small muted">Forma de pago</label><select id="m_${l.empId}">${PAY_METHODS.map((m) => `<option>${m}</option>`).join('')}</select></div>
+            <button class="btn green" data-pay="${l.empId}" style="flex:1;min-height:50px">${I.check} Pagar</button>
+          </div>`}
+      </div>`).join('')}</div>
+    ${t.pending > 0 && p.lines.filter((l) => !l.paid).length > 1 ? `<button class="btn primary" id="payall">${I.check} Pagar a todos (${S.money(t.pending)})</button>` : ''}
+    <a class="btn secondary" href="#/wo/${q.id}">${I.tool} Ver orden de trabajo</a>`;
+  const payOne = (empId, method) => {
+    const l = S.payPayrollLine(q.id, empId, method);
+    return l;
+  };
+  $app.querySelectorAll('[data-pay]').forEach((b) => b.onclick = () => {
+    const empId = b.dataset.pay;
+    const m = $app.querySelector('#m_' + empId).value;
+    const l = payOne(empId, m);
+    if (!l) return;
+    toast('Pago registrado. Genera el recibo.');
+    route();
+  });
+  const pa = $app.querySelector('#payall');
+  if (pa) pa.onclick = () => {
+    if (!confirmT('¿Registrar el pago a todos los empleados pendientes?')) return;
+    p.lines.filter((l) => !l.paid).forEach((l) => payOne(l.empId, $app.querySelector('#m_' + l.empId)?.value || 'Efectivo'));
+    toast('Planilla pagada');
+    route();
+  };
+  $app.querySelectorAll('[data-receipt]').forEach((b) => b.onclick = async () => {
+    const l = p.lines.find((x) => x.empId === b.dataset.receipt);
+    const en = UI() === 'en';
+    const msg = en ? `Payment receipt #${l.receipt} – ${S.money(l.amount)} – ${S.settings().bizName}` : `Recibo de pago #${l.receipt} – ${S.money(l.amount)} – ${S.settings().bizName}`;
+    const label = b.innerHTML;
+    b.disabled = true; b.textContent = UI() === 'en' ? 'Creating PDF…' : 'Generando PDF…';
+    try {
+      const r = await shareReceiptPdf(q, l, msg);
+      if (r !== 'cancelled') toast(r === 'shared' ? 'Recibo enviado' : 'PDF descargado: envíalo por WhatsApp');
+    } catch (e) { toast('No se pudo crear el PDF'); }
+    b.disabled = false; b.innerHTML = label;
+  });
+}
+
+let payFilter = 'pending';
+function viewPayrolls() {
+  setTabs(null);
+  const all = S.quotes().filter((q) => q.payroll);
+  const list = all.filter((q) => { const t = S.payrollTotals(q.payroll); return payFilter === 'pending' ? t.pending > 0 : payFilter === 'paid' ? t.pending <= 0 : true; });
+  const pend = all.reduce((s, q) => s + S.payrollTotals(q.payroll).pending, 0);
+  const pill = (k, label) => `<button class="pill" data-f="${k}" aria-pressed="${payFilter === k}">${label}</button>`;
+  $app.innerHTML = `
+    ${topbar('Planillas de pago', '#/employees')}
+    <div class="card g"><span class="small muted">Total pendiente de pagar a empleados</span><span class="big" style="color:${pend ? 'var(--orange-soft)' : '#fff'}">${S.money(pend)}</span></div>
+    <div class="pills">${pill('pending', 'Pendientes')}${pill('paid', 'Pagadas')}${pill('all', 'Todas')}</div>
+    <div class="list">${list.length ? list.map((q) => {
+      const t = S.payrollTotals(q.payroll);
+      return `<a class="item g" href="#/payroll/${q.id}"><span class="col" style="flex-grow:1">
+        <span style="font-size:15px;font-weight:600"><span>Planilla #${q.payroll.number}</span><span data-noi18n> · ${esc(q.title || '')}</span></span>
+        <span class="small muted"><span>Orden de trabajo #${q.wo.number}</span><span data-noi18n> · ${esc(q.payroll.lines.map((l) => l.name.split(' ')[0]).join(', '))}</span></span></span>
+        <span class="col" style="align-items:flex-end;gap:4px"><span style="font-weight:700">${S.money(t.total)}</span>${t.pending > 0 ? `<span class="chip orange">Pendiente ${S.money(t.pending)}</span>` : '<span class="chip green">Pagada</span>'}</span></a>`;
+    }).join('') : '<div class="empty g card">No hay planillas aquí. Se crean al terminar una orden de trabajo con empleados asignados.</div>'}</div>`;
+  $app.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { payFilter = b.dataset.f; route(); });
 }
 
 /* ---------- Obras y cotizaciones ---------- */
@@ -1385,6 +1648,10 @@ let route = function () {
     case 'wo': return viewWorkOrder(arg);
     case 'works': case 'invoices': return viewWorks();
     case 'profile': return viewProfile();
+    case 'employees': return viewEmployees();
+    case 'employee': return viewEmployee(arg);
+    case 'payroll': return viewPayroll(arg);
+    case 'payrolls': return viewPayrolls();
     case 'invoice': return viewInvoice(arg);
     case 'clients': return viewClients();
     case 'client': return viewClient(arg);
@@ -1395,14 +1662,22 @@ let route = function () {
 
 // Cada render usa un nodo nuevo para no acumular listeners de la pantalla anterior.
 function freshApp() {
-  const n = $app.cloneNode(false);
-  $app.replaceWith(n);
+  const cur = document.getElementById('app') || $app;
+  const n = cur.cloneNode(false);
+  cur.replaceWith(n);
   $app = n;
 }
 const _route = route;
+let routing = false;
 route = function () {
-  freshApp();
-  _route();
+  if (routing) { setTimeout(route, 0); return; }
+  routing = true;
+  try {
+    freshApp();
+    _route();
+  } finally {
+    routing = false;
+  }
   const pub = (location.hash || '').startsWith('#/c/');
   document.documentElement.lang = pub ? document.documentElement.lang : UI();
   if (!pub && UI() === 'en') { translateDOM($app); translateDOM($tab); }
