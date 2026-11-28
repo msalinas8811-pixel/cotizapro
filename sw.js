@@ -1,5 +1,5 @@
 // CotizaPro — service worker: funciona sin internet
-const CACHE = 'cotizapro-v8';
+const CACHE = 'cotizapro-v9';
 const ASSETS = [
   './', './index.html', './css/styles.css', './js/app.js', './js/store.js', './js/parser.js', './js/icons.js', './js/pdf.js', './js/geo.js', './js/i18n.js', './js/i18n-en.js', './js/photos.js', './js/vendor/jspdf.umd.min.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
@@ -22,7 +22,7 @@ self.addEventListener('fetch', (e) => {
   // Archivos propios: primero red, si no hay internet usa la copia guardada
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(req).then((res) => {
+      fetch(req, { cache: 'no-cache' }).then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
         return res;

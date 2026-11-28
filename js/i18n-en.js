@@ -165,6 +165,11 @@ export const EN = {
   'Cuando un cliente apruebe una cotización, aparecerá aquí.': 'When a customer approves an estimate, it will show up here.',
   'Cotización en PDF': 'Estimate PDF', 'PDF enviado': 'PDF sent',
 
+  'Descripción (la ve el cliente) *': 'Description (customer sees it) *', 'Detalle (opcional)': 'Detail (optional)',
+  'En español (opcional)': 'In Spanish (optional)', 'En inglés (opcional)': 'In English (optional)', 'Para ti': 'For you', 'Para el cliente': 'For the customer',
+  'Ej. Pintura interior por cuarto': 'e.g. Interior painting per room', 'Ej. Interior painting – per room': 'e.g. Interior painting – per room',
+  'Ej. 2 manos': 'e.g. 2 coats', 'Ej. 2 coats': 'e.g. 2 coats', 'Escribe la descripción de cada partida': 'Enter a description for each line item',
+
   // PDF
   'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
 };

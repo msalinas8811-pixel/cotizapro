@@ -423,17 +423,24 @@ function viewNew() {
 }
 
 function lineHTML(it, i) {
+  // El primer campo es la descripción en el idioma del cliente; el segundo, opcional, en el otro idioma
+  const cl = S.settings().clientLang === 'es' ? 'es' : 'en';
+  const other = cl === 'es' ? 'en' : 'es';
+  const ph = cl === 'es' ? 'Ej. Pintura interior por cuarto' : 'Ej. Interior painting – per room';
   return `<div class="line">
-    <div class="row"><label class="vh" for="en${i}">Descripción en inglés</label>
-      <input id="en${i}" data-f="en" placeholder="Description (English)" value="${esc(it.en)}" style="font-weight:600">
-      <button class="icon-btn" data-rm aria-label="Quitar partida" style="width:40px;height:40px">${I.trash}</button></div>
-    <label class="vh" for="es${i}">Descripción en español</label>
-    <input id="es${i}" data-f="es" placeholder="Descripción en español (para ti)" value="${esc(it.es)}" style="min-height:40px;font-size:13px">
-    <label class="vh" for="no${i}">Detalle</label>
-    <input id="no${i}" data-f="note" placeholder="Detail, e.g. 2 coats" value="${esc(it.note)}" style="min-height:40px;font-size:13px">
+    <div class="row" style="align-items:flex-end">
+      <div class="field" style="flex-grow:1"><label for="d1_${i}" class="small muted">Descripción (la ve el cliente) *</label>
+        <input id="d1_${i}" data-f="${cl}" placeholder="${ph}" value="${esc(it[cl] || it[other] || '')}" style="font-weight:600"></div>
+      <button type="button" class="icon-btn" data-rm aria-label="Quitar partida" style="width:44px;height:44px;margin-bottom:3px">${I.trash}</button></div>
+    <div class="grid2">
+      <div class="field"><label for="no${i}" class="small muted">Detalle (opcional)</label>
+        <input id="no${i}" data-f="note" placeholder="${cl === 'es' ? 'Ej. 2 manos' : 'Ej. 2 coats'}" value="${esc(it.note)}" style="min-height:44px;font-size:14px"></div>
+      <div class="field"><label for="d2_${i}" class="small muted">${other === 'es' ? 'En español (opcional)' : 'En inglés (opcional)'}</label>
+        <input id="d2_${i}" data-f="${other}" placeholder="${other === 'es' ? 'Para ti' : 'Para el cliente'}" value="${esc(it[cl] ? it[other] || '' : '')}" style="min-height:44px;font-size:14px"></div>
+    </div>
     <div class="row">
-      <div class="field qty"><label for="q${i}" class="small muted">Cant.</label><input id="q${i}" data-f="qty" type="number" min="0" step="0.5" value="${it.qty}"></div>
-      <div class="field price"><label for="p${i}" class="small muted">Precio c/u ($)</label><input id="p${i}" data-f="price" type="number" min="0" step="1" value="${it.price}"></div>
+      <div class="field qty"><label for="q${i}" class="small muted">Cant.</label><input id="q${i}" data-f="qty" type="number" min="0" step="0.5" inputmode="decimal" value="${it.qty}"></div>
+      <div class="field price"><label for="p${i}" class="small muted">Precio c/u ($)</label><input id="p${i}" data-f="price" type="number" min="0" step="1" inputmode="decimal" value="${it.price}"></div>
     </div></div>`;
 }
 
@@ -1035,8 +1042,10 @@ function viewQuoteForm(arg, extra) {
     const t = tmp();
     if (!name) { toast('Escribe el nombre del cliente'); cn.focus(); return; }
     if (!cp.value.trim()) { toast('Escribe el WhatsApp del cliente'); cp.focus(); return; }
-    t.items = t.items.filter((i) => i.en || i.es || i.price);
+    t.items = t.items.filter((i) => i.en || i.es || i.note || i.price);
     if (!t.items.length || !t.items.some((i) => i.price > 0)) { toast('Agrega al menos una partida con precio'); return; }
+    const noDesc = [...$app.querySelectorAll('.line')].find((el) => !el.querySelector('[data-f=en]').value.trim() && !el.querySelector('[data-f=es]').value.trim() && (el.querySelector('[data-f=price]').value || el.querySelector('[data-f=note]').value));
+    if (noDesc) { toast('Escribe la descripción de cada partida'); noDesc.querySelector('[id^=d1_]').focus(); return; }
     let client = cliSel && cliSel.value ? S.getClient(cliSel.value) : S.clients().find((x) => x.name.toLowerCase() === name.toLowerCase());
     client = S.upsertClient({ ...(client ? { id: client.id } : {}), name, phone: cp.value.trim(), email: ce.value.trim(), address: ca.value.trim() });
     const data = {
@@ -1061,7 +1070,7 @@ function docHTML(p, L) {
   const q = p.q, b = p.b;
   const t = S.totals({ items: q.items, taxRate: q.tax, depositPct: q.dep, payments: q.paid ? [{ amount: q.paid }] : [] });
   const inv = p.kind === 'invoice';
-  const desc = (i) => (L === 'es' && i.es ? i.es : i.en || i.es);
+  const desc = (i) => (L === 'es' ? i.es || i.en : i.en || i.es) || i.note || q.title || (L === 'es' ? 'Servicio' : 'Service');
   const kv = (k, v) => v ? `<div class="col"><span class="small muted">${k}</span><span style="font-size:14px;font-weight:600">${esc(v)}</span></div>` : '';
   return `
   <article class="card g doc" data-noi18n style="gap:14px;padding:18px">

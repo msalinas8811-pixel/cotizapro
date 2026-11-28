@@ -135,7 +135,7 @@ export async function buildDocPdf(q, kind = 'invoice') {
   y += 24;
   doc.setFont('helvetica', 'normal');
   q.items.forEach((it) => {
-    const desc = clean(L === 'es' && it.es ? it.es : it.en || it.es);
+    const desc = clean((L === 'es' ? it.es || it.en : it.en || it.es) || it.note || q.title || (L === 'es' ? 'Servicio' : 'Service'));
     const lines = doc.splitTextToSize(desc, cx.qty - cx.desc - 40);
     const note = it.note ? doc.splitTextToSize(clean(it.note), cx.qty - cx.desc - 40) : [];
     const h = 12 + lines.length * 12 + note.length * 11;
