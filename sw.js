@@ -1,5 +1,5 @@
 // CotizaPro — service worker: funciona sin internet
-const CACHE = 'cotizapro-v11';
+const CACHE = 'cotizapro-v12';
 const ASSETS = [
   './', './index.html', './css/styles.css', './js/app.js', './js/store.js', './js/parser.js', './js/icons.js', './js/pdf.js', './js/geo.js', './js/i18n.js', './js/i18n-en.js', './js/photos.js', './js/vendor/jspdf.umd.min.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'

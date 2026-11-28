@@ -1283,7 +1283,7 @@ function viewApprove(id, sigEnc) {
 function trackPayload(q) {
   const c = S.getClient(q.clientId);
   return {
-    v: 2, kind: 'track', base: appBase(), lang: S.settings().clientLang,
+    v: 2, kind: 'track', base: appBase(), lang: S.settings().clientLang, qid: q.id,
     b: (({ n, p, e, logo, ins, lic }) => ({ n, p, e, logo, ins, lic }))(bizInfo(false)),
     w: {
       n: q.wo.number, qn: q.number, title: q.title, client: c?.name || '', job: q.jobAddress || c?.address || '',
@@ -1696,7 +1696,39 @@ function viewWorks() {
 let pubLang = null;
 let pubApproved = '';
 let pubRelayOk = null;
+// Cuando el dueño del negocio abre la vista del cliente desde su app: barra para volver
 function viewPublic(data, print) {
+  viewPublicInner(data, print);
+  if (!S.getDB().onboarded) return;
+  const p = S.decodeShare(data);
+  const en = UI() === 'en';
+  const local = p && (p.q?.id ? S.getQuote(p.q.id) : p.qid ? S.getQuote(p.qid) : null);
+  let back = prevHash && !prevHash.startsWith('#/c/') && !prevHash.startsWith('#/ok/') ? prevHash : '';
+  if (!back) {
+    if (p?.kind === 'profile') back = '#/profile';
+    else if (local && p.kind === 'track') back = '#/wo/' + local.id;
+    else if (local && p.kind === 'invoice') back = '#/invoice/' + local.id;
+    else if (local) back = '#/doc/' + local.id;
+    else back = '#/home';
+  }
+  const kindTxt = { estimate: en ? 'Estimate' : 'Cotización', invoice: en ? 'Invoice' : 'Factura', track: en ? 'Job tracking' : 'Seguimiento', profile: en ? 'Profile' : 'Perfil' }[p?.kind] || '';
+  $app.insertAdjacentHTML('afterbegin', `<div class="g no-print" style="position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:12;border-radius:18px;padding:8px 10px 8px 8px;display:flex;align-items:center;gap:10px;background:rgba(20,26,48,0.9)">
+    <a class="icon-btn" href="${esc(back)}" aria-label="${en ? 'Back to app' : 'Volver a la app'}" style="width:40px;height:40px">${I.back}</a>
+    <span class="col" style="flex-grow:1"><span style="font-size:14px;font-weight:700">${en ? 'Customer view' : 'Vista del cliente'}${kindTxt ? ' · ' + kindTxt : ''}</span>
+      <span class="small muted">${en ? 'This is what your customer sees' : 'Así lo ve tu cliente'}</span></span>
+    <a href="${esc(back)}" class="chip cyan" style="padding:8px 12px;font-size:12px">${en ? 'Back to app' : 'Volver a la app'}</a>
+  </div>`);
+  // En la vista previa del dueño no se puede aprobar por el cliente (evita aprobar por error)
+  const ap = $app.querySelector('#appr');
+  if (ap && local) {
+    ap.disabled = true;
+    const sg = $app.querySelector('#sig');
+    if (sg) sg.disabled = true;
+    ap.insertAdjacentHTML('afterend', `<span class="small muted" style="text-align:center">${en ? 'Preview: your customer signs and approves here. If they approved in person or by phone, use "Customer approved" in the estimate.' : 'Vista previa: aquí el cliente firma y aprueba. Si aprobó en persona o por teléfono, usa "El cliente aprobó" en la cotización.'}</span>`);
+  }
+}
+
+function viewPublicInner(data, print) {
   setTabs(null);
   const p = S.decodeShare(data);
   if (!p) { $app.innerHTML = '<div class="empty g card">Este link no es válido o está incompleto.</div>'; return; }
@@ -1753,12 +1785,14 @@ function viewPublic(data, print) {
 
 /* ---------- Router ---------- */
 let lastHash = '';
+let prevHash = '';
 let route = function () {
   const h = location.hash || '';
   const [, page = '', arg = '', extra = ''] = h.split('/');
   const db = S.getDB();
   if (h !== lastHash && !h.startsWith('#/c/')) { pubLang = null; pubApproved = ''; pubRelayOk = null; }
   if (h !== lastHash) window.scrollTo(0, 0);
+  if (h !== lastHash) prevHash = lastHash;
   lastHash = h;
   if (page === 'c' && arg) return viewPublic(arg, extra === 'print');
   if (page === 'ok' && db.onboarded) return viewApprove(arg, extra);
