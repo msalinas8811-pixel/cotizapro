@@ -21,10 +21,14 @@ function loadJsPDF() {
 const L10N = {
   en: { inv: 'INVOICE', no: 'Invoice #', date: 'Date', due: 'Due date', wo: 'Work order #', est: 'Estimate #', billTo: 'BILL TO', job: 'JOB', done: 'Completed',
     desc: 'Description', qty: 'Qty', price: 'Unit price', amount: 'Amount', sub: 'Subtotal', tax: 'Tax', total: 'Total', paid: 'Paid', bal: 'Balance due',
-    payments: 'Payments received', pay: 'Pay online', photos: 'Before & after photos', before: 'BEFORE', after: 'AFTER', warranty: 'Warranty', terms: 'Terms', thanks: 'Thank you for your business!', stampPaid: 'PAID' },
+    payments: 'Payments received', pay: 'Pay online', photos: 'Before & after photos', before: 'BEFORE', after: 'AFTER', warranty: 'Warranty', terms: 'Terms', thanks: 'Thank you for your business!', stampPaid: 'PAID',
+    estTitle: 'ESTIMATE', valid: 'Valid until', start: 'Start date', duration: 'Duration', scope: 'Scope of work', excl: 'Not included', dep: 'Deposit due to start',
+    accept: 'Acceptance', approvedBy: 'Approved and signed by', sigCustomer: 'Customer signature', sigDate: 'Date', file: 'Estimate' },
   es: { inv: 'FACTURA', no: 'Factura #', date: 'Fecha', due: 'Vence', wo: 'Orden de trabajo #', est: 'Cotización #', billTo: 'CLIENTE', job: 'TRABAJO', done: 'Terminado',
     desc: 'Descripción', qty: 'Cant.', price: 'Precio', amount: 'Monto', sub: 'Subtotal', tax: 'Impuesto', total: 'Total', paid: 'Pagado', bal: 'Saldo pendiente',
-    payments: 'Pagos recibidos', pay: 'Pagar en línea', photos: 'Fotos del antes y después', before: 'ANTES', after: 'DESPUÉS', warranty: 'Garantía', terms: 'Condiciones', thanks: '¡Gracias por su preferencia!', stampPaid: 'PAGADA' }
+    payments: 'Pagos recibidos', pay: 'Pagar en línea', photos: 'Fotos del antes y después', before: 'ANTES', after: 'DESPUÉS', warranty: 'Garantía', terms: 'Condiciones', thanks: '¡Gracias por su preferencia!', stampPaid: 'PAGADA',
+    estTitle: 'COTIZACIÓN', valid: 'Válida hasta', start: 'Fecha de inicio', duration: 'Duración', scope: 'Alcance del trabajo', excl: 'No incluye', dep: 'Anticipo para empezar',
+    accept: 'Aceptación', approvedBy: 'Aprobada y firmada por', sigCustomer: 'Firma del cliente', sigDate: 'Fecha', file: 'Cotizacion' }
 };
 
 const d = (t, L) => t ? new Date(typeof t === 'string' && t.length === 10 ? t + 'T12:00' : t).toLocaleDateString(L === 'es' ? 'es-US' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -32,7 +36,10 @@ const d = (t, L) => t ? new Date(typeof t === 'string' && t.length === 10 ? t + 
 const fileSafe = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '-');
 const clean = (s) => String(s ?? '').replace(/[–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[^\x00-\xFF]/g, '');
 
-export async function buildInvoicePdf(q) {
+export const buildInvoicePdf = (q) => buildDocPdf(q, 'invoice');
+
+export async function buildDocPdf(q, kind = 'invoice') {
+  const est = kind === 'estimate';
   const jsPDF = await loadJsPDF();
   const s = S.settings();
   const c = S.getClient(q.clientId) || {};
@@ -65,9 +72,13 @@ export async function buildInvoicePdf(q) {
 
   // Título
   doc.setTextColor(...accent); doc.setFont('helvetica', 'bold'); doc.setFontSize(24);
-  doc.text(T.inv, W - M, y + 18, { align: 'right' });
+  doc.text(clean(est ? T.estTitle : T.inv), W - M, y + 18, { align: 'right' });
   doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...ink);
-  const meta = [
+  const meta = est ? [
+    [T.est, String(q.number)],
+    [T.date, d(q.createdAt, L)],
+    q.validUntil ? [T.valid, d(q.validUntil, L)] : null
+  ].filter(Boolean) : [
     [T.no, String(q.number)],
     [T.date, d(q.invoicedAt || Date.now(), L)],
     q.dueDate && t.balance > 0 ? [T.due, d(q.dueDate, L)] : null,
@@ -90,9 +101,30 @@ export async function buildInvoicePdf(q) {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...muted);
   const cl = [c.address, c.phone, c.email].filter(Boolean);
   cl.forEach((l, i) => doc.text(clean(l), M, y + 29 + i * 12));
-  const jl = [q.jobAddress, q.completedAt ? `${T.done}: ${d(q.completedAt, L)}` : '', `${T.est}${q.number}`].filter(Boolean);
+  const jl = (est
+    ? [q.jobAddress || c.address, q.startDate ? `${T.start}: ${d(q.startDate, L)}` : '', q.duration ? `${T.duration}: ${q.duration}` : '']
+    : [q.jobAddress, q.startDate ? `${T.start}: ${d(q.startDate, L)}` : '', q.completedAt ? `${T.done}: ${d(q.completedAt, L)}` : '', `${T.est}${q.number}`]).filter(Boolean);
   jl.forEach((l, i) => doc.text(clean(l), M + colW, y + 29 + i * 12));
   y += 29 + Math.max(cl.length, jl.length) * 12 + 18;
+
+  // Descripción / alcance del trabajo
+  if (q.scope && q.scope.trim()) {
+    const sl = doc.splitTextToSize(clean(q.scope.trim()), W - 2 * M - 24);
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...accent);
+    doc.text(clean(T.scope.toUpperCase()), M, y); y += 8;
+    let i = 0;
+    while (i < sl.length) {
+      const room = Math.max(1, Math.floor((H - 120 - y - 20) / 13));
+      const chunk = sl.slice(i, i + room);
+      doc.setFillColor(248, 250, 252); doc.roundedRect(M, y, W - 2 * M, chunk.length * 13 + 16, 6, 6, 'F');
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...ink);
+      doc.text(chunk, M + 12, y + 16);
+      y += chunk.length * 13 + 16;
+      i += chunk.length;
+      if (i < sl.length) { doc.addPage(); y = M; }
+    }
+    y += 20;
+  }
 
   // Tabla de partidas
   const cx = { desc: M + 10, qty: W - M - 190, price: W - M - 100, amt: W - M - 10 };
@@ -129,6 +161,14 @@ export async function buildInvoicePdf(q) {
   row(T.sub, S.money(t.subtotal));
   row(`${T.tax} (${q.taxRate}%)`, S.money(t.tax));
   row(T.total, S.money(t.total), true);
+  if (est) {
+    if (q.depositPct) {
+      doc.setFillColor(236, 254, 255);
+      doc.roundedRect(tx - 10, y - 4, W - M - tx + 10, 28, 6, 6, 'F');
+      y += 14;
+      row(`${L === 'es' ? 'Anticipo' : 'Deposit'} (${q.depositPct}%)`, S.money(t.deposit), true, accent);
+    }
+  } else {
   if (t.paid) row(T.paid, '-' + S.money(t.paid), false, [5, 150, 105]);
   doc.setFillColor(t.balance > 0 ? 236 : 220, t.balance > 0 ? 254 : 252, t.balance > 0 ? 255 : 231);
   doc.roundedRect(tx - 10, y - 4, W - M - tx + 10, 28, 6, 6, 'F');
@@ -140,9 +180,10 @@ export async function buildInvoicePdf(q) {
     doc.setTextColor(5, 150, 105); doc.setFont('helvetica', 'bold'); doc.setFontSize(40);
     doc.text(T.stampPaid, M + 20, y - 20, { angle: 12 });
   }
+  }
 
   // Pagos recibidos
-  if (q.payments?.length) {
+  if (!est && q.payments?.length) {
     y += 10;
     doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...accent); doc.text(T.payments.toUpperCase(), M, y); y += 13;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...muted);
@@ -161,9 +202,29 @@ export async function buildInvoicePdf(q) {
     if (link) doc.link(M, y - 9, W - 2 * M, ls.length * 12, { url: text });
     y += ls.length * 12 + 10;
   };
-  if (t.balance > 0 && s.paymentLink) block(T.pay, s.paymentLink, true);
-  block(T.warranty, s.warranty);
+  if (!est && t.balance > 0 && s.paymentLink) block(T.pay, s.paymentLink, true);
   block(T.terms, s.terms);
+  block(T.warranty, s.warranty);
+  if (est) block(T.excl, q.exclusions);
+
+  // Aceptación (cotización)
+  if (est) {
+    if (y > H - 132) { doc.addPage(); y = M; }
+    y += 4;
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...accent); doc.text(clean(T.accept.toUpperCase()), M, y); y += 12;
+    if (q.signature) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(5, 150, 105);
+      doc.text(clean(`${T.approvedBy} ${q.signature}${q.approvedAt ? '  -  ' + d(q.approvedAt, L) : ''}`), M, y);
+      y += 16;
+    } else {
+      y += 22;
+      doc.setDrawColor(...ink);
+      doc.line(M, y, M + 240, y); doc.line(W - M - 150, y, W - M, y);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...muted);
+      doc.text(clean(T.sigCustomer), M, y + 12); doc.text(clean(T.sigDate), W - M - 150, y + 12);
+      y += 24;
+    }
+  }
 
   // Pie
   doc.setDrawColor(...line); doc.line(M, H - 54, W - M, H - 54);
@@ -204,13 +265,16 @@ export async function buildInvoicePdf(q) {
     }
   }
 
-  const name = fileSafe(`${L === 'es' ? 'Factura' : 'Invoice'}-${q.number}-${c.name || 'cliente'}`) + '.pdf';
+  const name = fileSafe(`${est ? T.file : L === 'es' ? 'Factura' : 'Invoice'}-${q.number}-${c.name || 'cliente'}`) + '.pdf';
   return { blob: doc.output('blob'), name };
 }
 
 // Genera el PDF y abre "Compartir" (WhatsApp, correo…). Si el teléfono no puede, lo descarga.
-export async function shareInvoicePdf(q, message) {
-  const { blob, name } = await buildInvoicePdf(q);
+export const shareInvoicePdf = (q, message) => shareDocPdf(q, 'invoice', message);
+export const shareQuotePdf = (q, message) => shareDocPdf(q, 'estimate', message);
+
+export async function shareDocPdf(q, kind, message) {
+  const { blob, name } = await buildDocPdf(q, kind);
   const file = new File([blob], name, { type: 'application/pdf' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {

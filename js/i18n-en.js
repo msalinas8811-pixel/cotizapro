@@ -161,6 +161,10 @@ export const EN = {
   'Total pendiente de pagar a empleados': 'Total owed to employees', 'No hay planillas aquí. Se crean al terminar una orden de trabajo con empleados asignados.': 'No payroll here. It is created when a work order with assigned employees is completed.',
   'Transferencia': 'Bank transfer', 'Cash App': 'Cash App', 'Venmo': 'Venmo',
 
+  'Aprobadas por el cliente': 'Approved by customer', 'Todavía no hay cotizaciones aprobadas.': 'No approved estimates yet.',
+  'Cuando un cliente apruebe una cotización, aparecerá aquí.': 'When a customer approves an estimate, it will show up here.',
+  'Cotización en PDF': 'Estimate PDF', 'PDF enviado': 'PDF sent',
+
   // PDF
   'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
 };
@@ -208,6 +212,7 @@ export const PATTERNS = [
   [/^Ya existía la orden de trabajo #(\d+)(?: · firmada por (.+))?$/, (m, n, s) => `Work order #${n} already existed${s ? ' · signed by ' + s : ''}`],
   [/^Creada (.+)$/, 'Created $1'],
   [/^Inicio (.+)$/, 'Start $1'],
+  [/^Orden #(\d+)$/, 'Order #$1'],
   [/^(\d+) activos$/, '$1 active'],
   [/^Activos · (\d+)$/, 'Active · $1'],
   [/^(\d+) en obra$/, '$1 on a job'],

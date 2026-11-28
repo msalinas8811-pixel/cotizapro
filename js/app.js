@@ -2,7 +2,7 @@
 import * as S from './store.js';
 import { parseDictation } from './parser.js';
 import { I } from './icons.js';
-import { shareInvoicePdf, shareReceiptPdf } from './pdf.js';
+import { shareInvoicePdf, shareQuotePdf, shareReceiptPdf } from './pdf.js';
 import { COUNTRIES, US_STATES, countryName, stateCode } from './geo.js';
 import { tr, translateDOM, watch } from './i18n.js';
 import { addPhotos, deletePhotos, photoURL, photoFiles } from './photos.js';
@@ -302,6 +302,22 @@ function bindLogo(input, preview) {
   });
 }
 
+function approvedRow(q) {
+  const t = S.totals(q);
+  const state = q.status === 'invoiced' || statusOf(q) === 'overdue' ? chip(q)
+    : q.wo && q.wo.progress >= 100 ? '<span class="chip green">Obra terminada</span>'
+    : q.wo && q.wo.progress > 0 ? `<span class="chip cyan">En obra · ${q.wo.progress}%</span>` : '';
+  return `<a class="item g" href="${hrefFor(q)}">
+    <div class="col" style="flex-grow:1">
+      <span style="font-size:15px;font-weight:600" data-noi18n>${esc(clientName(q))}</span>
+      <span class="small muted"><span data-noi18n>${esc(q.title || '')}${q.title ? ' · ' : ''}</span><span>Aprobada</span> <span>${S.dateEs(q.approvedAt)}</span>${q.wo ? ` · <span>Orden #${q.wo.number}</span>` : ''}</span>
+    </div>
+    <div class="col" style="align-items:flex-end;gap:5px">
+      <span style="font-size:15px;font-weight:700">${S.money(t.total)}</span>
+      <span class="chip green">${I.check.replace(/width="\d+" height="\d+"/, 'width="12" height="12"')} Aprobada</span>${state}
+    </div></a>`;
+}
+
 function viewHome() {
   setTabs('home');
   const s = S.settings();
@@ -311,7 +327,7 @@ function viewHome() {
   const owed = qs.filter((q) => ['approved', 'invoiced'].includes(q.status)).reduce((a, q) => a + Math.max(0, S.totals(q).balance), 0);
   const owedN = qs.filter((q) => ['approved', 'invoiced'].includes(q.status) && S.totals(q).balance > 0).length;
   const paidMonth = qs.reduce((a, q) => a + (q.payments || []).filter((p) => p.t >= monthStart).reduce((x, p) => x + p.amount, 0), 0);
-  const pending = qs.filter((q) => q.status !== 'paid').slice(0, 6);
+  const approved = qs.filter((q) => q.approvedAt && q.status !== 'paid').sort((x, y) => y.approvedAt - x.approvedAt).slice(0, 8);
   const payPending = qs.filter((q) => q.payroll).reduce((s, q) => s + S.payrollTotals(q.payroll).pending, 0);
   const month = now.toLocaleDateString(UI() === 'en' ? 'en-US' : 'es-US', { month: 'short' });
   $app.innerHTML = `
@@ -331,8 +347,8 @@ function viewHome() {
       <a href="#/employees" class="item g" style="flex-direction:column;align-items:flex-start;gap:6px"><span style="color:var(--cyan)">${I.users}</span><span style="font-weight:600">Empleados</span><span class="small muted">${S.employees().filter((e) => e.active !== false).length} activos</span></a>
       <a href="#/payrolls" class="item g" style="flex-direction:column;align-items:flex-start;gap:6px"><span style="color:var(--green)">${I.card}</span><span style="font-weight:600">Planillas</span><span class="small muted">${payPending ? 'Por pagar ' + S.money(payPending) : 'Al día'}</span></a>
     </div>
-    <div class="row"><h2>Pendientes</h2><a href="#/works" style="font-size:13px">Ver todo</a></div>
-    <div class="list">${pending.length ? pending.map((q) => quoteRow(q)).join('') : `<div class="empty g card"><span>Aún no tienes cotizaciones.</span><br><span>Toca Cotizar servicio para hacer tu primera cotización.</span></div>`}</div>`;
+    <div class="row"><h2>Aprobadas por el cliente</h2><a href="#/works" style="font-size:13px">Ver todo</a></div>
+    <div class="list">${approved.length ? approved.map((q) => approvedRow(q)).join('') : `<div class="empty g card"><span>Todavía no hay cotizaciones aprobadas.</span><br><span>Cuando un cliente apruebe una cotización, aparecerá aquí.</span></div>`}</div>`;
 }
 
 let rec = null;
@@ -1118,7 +1134,7 @@ function viewDoc(id) {
       ${q.wo ? `<a class="btn green" href="#/wo/${q.id}">${I.tool} Ver orden de trabajo #${q.wo.number}</a>` : `<button class="btn primary" id="send">${I.whatsapp} Enviar al cliente por WhatsApp</button>`}
       <a class="btn secondary" href="${esc(shareUrl(q))}">${I.eye} Ver como el cliente</a>
       ${!q.wo ? `<button class="btn secondary" id="appr">${I.check} El cliente aprobó (crear orden de trabajo)</button>` : ''}
-      <button class="btn secondary" id="pdf">${I.print} Descargar PDF</button>
+      <button class="btn secondary" id="pdf">${I.print} Cotización en PDF</button>
       <button class="btn danger" id="del">${I.trash} Eliminar cotización</button>
     </div>
     ${historyHTML(q)}`;
@@ -1134,7 +1150,18 @@ function viewDoc(id) {
     toast('Orden de trabajo creada');
     go('#/wo/' + q.id);
   };
-  pdf.onclick = () => window.print();
+  pdf.onclick = async () => {
+    const s = S.settings();
+    const first = (S.getClient(q.clientId)?.name || '').split(' ')[0];
+    const msg = s.clientLang === 'es' ? `Hola ${first}, adjunto la cotización #${q.number} de ${s.bizName}.` : `Hi ${first}, attached is estimate #${q.number} from ${s.bizName}.`;
+    const label = pdf.innerHTML;
+    pdf.disabled = true; pdf.textContent = UI() === 'en' ? 'Creating PDF…' : 'Generando PDF…';
+    try {
+      const r = await shareQuotePdf(q, msg);
+      if (r !== 'cancelled') toast(r === 'shared' ? 'PDF enviado' : 'PDF descargado: envíalo por WhatsApp');
+    } catch (e) { toast('No se pudo crear el PDF'); }
+    pdf.disabled = false; pdf.innerHTML = label;
+  };
   del.onclick = () => { if (confirmT('¿Eliminar esta cotización?')) { deletePhotos([...(q.photos?.before || []), ...(q.photos?.after || [])]); S.deleteQuote(q.id); go('#/works'); } };
 }
 let docLang = null;
