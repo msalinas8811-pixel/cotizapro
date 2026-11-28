@@ -9,8 +9,10 @@ App (PWA) de cotizaciones y facturas para oficios en EE.UU.: pintores, limpieza,
 1. **Perfil de la empresa**: nombre, logo, dueño, dirección, teléfono, correo, sitio web, licencia, seguro, años de experiencia, servicios, garantía y horario. Se puede compartir con clientes.
 2. **Cotizar servicio**: formulario con datos del cliente, tipo de servicio, lugar del trabajo, alcance (escrito o dictado por voz), partidas con precios, fecha de inicio, duración, impuesto, anticipo y lo que no incluye.
 3. **Formato profesional de cotización**: datos de la empresa y del cliente, alcance, tabla de partidas, totales, anticipo, condiciones de pago, garantía y aceptación. Se ve en inglés o español.
-4. **Link por WhatsApp**: el cliente abre la cotización, firma con su nombre y toca *Aprobar*.
-5. **Orden de trabajo**: la aprobación llega por WhatsApp con un link. Al tocarlo en el teléfono del negocio, la orden se crea sola.
+4. **Pendiente de aprobar**: toda cotización nueva queda como *Pendiente de aprobar por el cliente* y no aparece en Inicio hasta que se aprueba.
+5. **Aprobación automática**: el cliente abre el link, firma y toca *Aprobar*. La aprobación viaja por un canal privado del negocio (servicio gratuito [ntfy.sh](https://ntfy.sh)) y la app la recibe sola: marca la cotización como aprobada y crea la orden de trabajo. Como respaldo, el cliente también puede avisar por WhatsApp con un link que hace lo mismo.
+6. **Aprobación manual**: si el cliente aprueba por teléfono, por mensaje, en persona, por correo u otra forma, se toca *El cliente aprobó* y se registra cómo aprobó (con detalle opcional). La forma de aprobación sale en la cotización y en el PDF.
+7. **Orden de trabajo**: se crea al aprobar, de cualquiera de las dos formas.
 6. **Seguimiento de la obra**: etapas (visita, materiales, en progreso, revisión, terminado), porcentaje de avance y notas. El cliente recibe un link de seguimiento por WhatsApp cada vez que hay un avance.
 7. **Fotos del antes y después (opcional)**: con la cámara o desde la galería, en la cotización o en la orden de trabajo. Se comprimen y se guardan en el teléfono, se pueden mandar al cliente y salen en una página aparte de la factura PDF.
 8. **Empleados**: lista de empleados con WhatsApp, oficio, forma de pago (por trabajo, por día o por hora) y tarifa.
@@ -92,7 +94,7 @@ Después pega la dirección del Worker en **Ajustes → Servidor de IA**. La cla
 ## Límites de esta versión (MVP)
 
 - Los datos viven en el teléfono, sin cuentas ni sincronización entre dispositivos.
-- La cotización y el seguimiento viajan dentro del link. La aprobación del cliente llega por WhatsApp y la orden se crea al abrir ese link en el teléfono donde se hizo la cotización. Con un backend, esto pasaría solo y en cualquier dispositivo.
+- La cotización y el seguimiento viajan dentro del link. Las aprobaciones llegan por ntfy.sh, que guarda los avisos por un tiempo limitado: si la app no se abre en varias horas, queda el aviso de WhatsApp como respaldo. Con un backend propio esto se puede hacer sin depender de un servicio externo.
 - El alcance del trabajo se muestra tal como se escribe: si el cliente habla inglés, escríbelo en inglés o usa el servidor de IA.
 - Las fotos viven en el teléfono: no viajan dentro del link de seguimiento. Se envían al cliente con el botón *Enviar fotos* o dentro de la factura PDF. El respaldo JSON no incluye las fotos.
 - Los cobros usan el link de pago del propio negocio (Stripe, Square o PayPal). Más adelante se puede integrar Stripe Connect.

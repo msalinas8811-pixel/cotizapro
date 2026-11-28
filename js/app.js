@@ -32,8 +32,8 @@ function toast(msg) {
 }
 
 const STATUS = {
-  draft: ['Borrador', 'gray'],
-  sent: ['Enviada', 'cyan'],
+  draft: ['Pendiente de aprobar', 'gray'],
+  sent: ['Pendiente de aprobar', 'cyan'],
   approved: ['Aprobada', 'green'],
   invoiced: ['Facturada', 'violet'],
   paid: ['Pagada', 'green'],
@@ -45,7 +45,7 @@ function statusOf(q) {
 }
 const chip = (q) => {
   if (q.wo && q.status !== 'paid' && statusOf(q) !== 'overdue') {
-    return q.wo.progress >= 100 ? '<span class="chip green">Obra terminada</span>' : `<span class="chip cyan">En obra · ${q.wo.progress}%</span>`;
+    return q.wo.progress >= 100 ? '<span class="chip green">Obra terminada</span>' : q.wo.progress > 0 ? `<span class="chip cyan">En obra · ${q.wo.progress}%</span>` : '<span class="chip green">Aprobada</span>';
   }
   const [t, c] = STATUS[statusOf(q)] || STATUS.draft;
   return `<span class="chip ${c}">${t}</span>`;
@@ -105,6 +105,7 @@ function sharePayload(q, kind) {
     v: 2,
     kind, // estimate | invoice
     base: appBase(),
+    ch: S.syncTopic(),
     b: bizInfo(false),
     q: {
       id: q.id, n: q.number, title: q.title, client: c?.name || '', addr: c?.address || '', cphone: c?.phone || '', cemail: c?.email || '',
@@ -717,7 +718,8 @@ const TXT = {
     tax: 'Tax', total: 'Total', dep: 'Deposit due to start', paid: 'Paid', bal: 'Balance due', terms: 'Payment terms', warranty: 'Warranty',
     excl: 'Not included', accept: 'Acceptance', lic: 'License', insured: 'Licensed & insured', insuredOnly: 'Insured',
     sign: 'Type your full name to sign', signNote: 'By signing you accept the scope, price and terms of this estimate.',
-    approve: 'Approve estimate', approved: 'Estimate approved!', confirm: 'Confirm approval on WhatsApp',
+    approve: 'Approve estimate', approved: 'Estimate approved!', confirm: 'Confirm approval on WhatsApp', sending: 'Sending your approval…',
+    sentAuto: 'Your approval was sent automatically.', sentAutoNote: 'The company will create your work order and send you a tracking link.', alsoWa: 'Also message them on WhatsApp',
     confirmNote: 'Tap the button to send your approval. The company will create your work order and send you a tracking link.',
     payDep: 'Pay deposit', pay: 'Pay now', sent: 'Sent with CotizaPro', needName: 'Type your name to sign',
     wo: 'Work order', progress: 'Progress', updates: 'Updates', contact: 'Message us on WhatsApp', track: 'Job tracking', lastUpd: 'Last update',
@@ -729,7 +731,8 @@ const TXT = {
     tax: 'Impuesto', total: 'Total', dep: 'Anticipo para empezar', paid: 'Pagado', bal: 'Saldo pendiente', terms: 'Condiciones de pago', warranty: 'Garantía',
     excl: 'No incluye', accept: 'Aceptación', lic: 'Licencia', insured: 'Con licencia y seguro', insuredOnly: 'Asegurado',
     sign: 'Escribe tu nombre completo para firmar', signNote: 'Al firmar aceptas el alcance, el precio y las condiciones de esta cotización.',
-    approve: 'Aprobar cotización', approved: '¡Cotización aprobada!', confirm: 'Confirmar aprobación por WhatsApp',
+    approve: 'Aprobar cotización', approved: '¡Cotización aprobada!', confirm: 'Confirmar aprobación por WhatsApp', sending: 'Enviando tu aprobación…',
+    sentAuto: 'Tu aprobación se envió automáticamente.', sentAutoNote: 'La empresa creará tu orden de trabajo y te enviará el link de seguimiento.', alsoWa: 'Avisar también por WhatsApp',
     confirmNote: 'Toca el botón para enviar tu aprobación. La empresa creará tu orden de trabajo y te enviará el link de seguimiento.',
     payDep: 'Pagar anticipo', pay: 'Pagar ahora', sent: 'Enviada con CotizaPro', needName: 'Escribe tu nombre para firmar',
     wo: 'Orden de trabajo', progress: 'Avance', updates: 'Avances', contact: 'Escríbenos por WhatsApp', track: 'Seguimiento de la obra', lastUpd: 'Última actualización',
@@ -1126,6 +1129,70 @@ function docHTML(p, L) {
   </article>`;
 }
 
+function openManualApproval(q) {
+  const methods = Object.entries(S.APPROVAL_METHODS).filter(([k]) => k !== 'link');
+  const sheet = document.createElement('div');
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:30;background:rgba(5,8,18,0.6);display:flex;align-items:flex-end;justify-content:center';
+  sheet.innerHTML = `<form class="g card" role="dialog" aria-label="Aprobación manual" style="width:min(480px,100%);border-radius:26px 26px 0 0;padding:20px 20px calc(24px + env(safe-area-inset-bottom,0px));background:rgba(20,26,48,0.95);gap:14px;max-height:92vh;overflow:auto">
+    <h2>El cliente aprobó la cotización #${q.number}</h2>
+    <span class="small muted">Registra cómo te dio la aprobación. Se creará la orden de trabajo.</span>
+    <div class="field"><span class="flabel">¿Cómo la aprobó?</span>
+      <div class="list" style="gap:8px">${methods.map(([k, v], i) => `<label class="row g" style="min-height:50px;border-radius:14px;padding:0 14px;cursor:pointer;justify-content:flex-start;gap:12px"><input type="radio" name="am" value="${k}" ${i === 0 ? 'checked' : ''} style="width:20px;height:20px;min-height:0;accent-color:#67E8F9"><span style="font-size:14px">${v.es}</span></label>`).join('')}</div></div>
+    <div class="field"><label for="amn">Detalle de la aprobación (opcional)</label><input id="amn" placeholder="Ej. Llamada del 27 nov, habló con la señora Smith"></div>
+    <div class="field"><label for="amw">¿Quién aprobó?</label><input id="amw" value="${esc(S.getClient(q.clientId)?.name || '')}"></div>
+    <button class="btn green" type="submit">${I.check} Aprobar y crear orden de trabajo</button>
+    <button class="link-btn" type="button" data-close style="align-self:center">Cancelar</button>
+  </form>`;
+  document.body.appendChild(sheet);
+  const f = sheet.querySelector('form');
+  sheet.addEventListener('click', (e) => { if (e.target === sheet || e.target.closest('[data-close]')) sheet.remove(); });
+  f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const method = f.querySelector('input[name=am]:checked').value;
+    S.createWorkOrder(q.id, f.querySelector('#amw').value.trim(), '', method, f.querySelector('#amn').value.trim());
+    sheet.remove();
+    toast('Orden de trabajo creada');
+    go('#/wo/' + q.id);
+  });
+}
+
+/* ---------- Aprobaciones automáticas desde el link del cliente ---------- */
+// El cliente aprueba en su teléfono y la aprobación viaja por un canal privado (ntfy.sh).
+// La app la recibe al abrirse y cada pocos segundos mientras está abierta.
+const RELAY = 'https://ntfy.sh/';
+let checking = false;
+async function checkApprovals() {
+  const s = S.settings();
+  if (checking || !S.getDB().onboarded || !s.syncTopic || !navigator.onLine) return;
+  checking = true;
+  try {
+    const since = s.syncSince || '7d';
+    const res = await fetch(`${RELAY}${s.syncTopic}/json?poll=1&since=${encodeURIComponent(since)}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const lines = (await res.text()).split('\n').filter(Boolean);
+    let last = null;
+    const approved = [];
+    for (const ln of lines) {
+      let m; try { m = JSON.parse(ln); } catch (e) { continue; }
+      if (m.event !== 'message') continue;
+      last = m.id;
+      let data; try { data = JSON.parse(m.message); } catch (e) { continue; }
+      if (data.t !== 'approve' || !data.id) continue;
+      const q = S.getQuote(data.id);
+      if (!q || q.approvedAt) continue;
+      S.createWorkOrder(q.id, String(data.sig || '').slice(0, 80), '', 'link');
+      approved.push(q);
+    }
+    if (last) S.updateSettings({ syncSince: last });
+    if (approved.length) {
+      const q = approved[approved.length - 1];
+      const name = S.getClient(q.clientId)?.name || '';
+      toast(UI() === 'en' ? `${name} approved estimate #${q.number}` : `${name} aprobó la cotización #${q.number}`);
+      if (!/^#\/(quote-form|settings|employee)/.test(location.hash)) route();
+    }
+  } catch (e) { /* sin conexión: se revisa después */ } finally { checking = false; }
+}
+
 function viewDoc(id) {
   const q = S.getQuote(id);
   if (!q) return go('#/works');
@@ -1134,11 +1201,20 @@ function viewDoc(id) {
   const p = sharePayload(q, 'estimate');
   $app.innerHTML = `
     ${topbar('Cotización #' + q.number, '#/works', `<a class="icon-btn" href="#/quote-form/${q.id}" aria-label="Editar cotización">${I.pen}</a>`)}
+    ${!q.approvedAt ? `<div class="card g no-print" style="gap:6px;border-color:rgba(253,186,116,0.45);background:rgba(253,186,116,0.10)">
+        <span style="font-weight:700;display:flex;gap:8px;align-items:center;color:var(--orange-soft)">${I.clock} Cotización pendiente de aprobar por el cliente</span>
+        <span class="small muted">${q.status === 'sent' ? 'Ya se envió al cliente.' : 'Todavía no se ha enviado al cliente.'}</span>
+        <span class="small muted">Cuando el cliente la apruebe desde el link, se aprueba sola y se crea la orden de trabajo.</span>
+      </div>` : ''}
     <div class="row no-print">${chip(q)}
       <div class="seg" role="group" aria-label="Idioma de vista"><button data-l="en" aria-pressed="${L === 'en'}">EN</button><button data-l="es" aria-pressed="${L === 'es'}">ES</button></div></div>
     ${docHTML(p, L)}
     ${hasPhotos(q) ? `<div class="card g"><span class="label">Fotos del trabajo</span>${q.photos.before.length ? photoSectionHTML('before', q.photos.before, false) : ''}${q.photos.after.length ? photoSectionHTML('after', q.photos.after, false) : ''}</div>` : ''}
-    ${q.signature ? `<div class="card g"><span class="label">Aprobada</span><span class="sig" style="font-size:24px;border:none">${esc(q.signature)}</span><span class="small muted">${q.approvedAt ? fullDate(q.approvedAt, UI()) : ''}</span></div>` : ''}
+    ${q.approvedAt ? `<div class="card g" style="background:rgba(110,231,183,0.14);gap:6px">
+        <span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} Cliente aprobó la cotización</span>
+        ${q.signature ? `<span class="sig" style="font-size:24px;border:none" data-noi18n>${esc(q.signature)}</span>` : ''}
+        <span class="small muted"><span data-noi18n>${esc(S.approvalText(q, UI()))}</span> · <span>${fullDate(q.approvedAt, UI())}</span></span>
+      </div>` : ''}
     <div class="list no-print">
       ${q.wo ? `<a class="btn green" href="#/wo/${q.id}">${I.tool} Ver orden de trabajo #${q.wo.number}</a>` : `<button class="btn primary" id="send">${I.whatsapp} Enviar al cliente por WhatsApp</button>`}
       <a class="btn secondary" href="${esc(shareUrl(q))}">${I.eye} Ver como el cliente</a>
@@ -1152,13 +1228,7 @@ function viewDoc(id) {
   const sn = $app.querySelector('#send');
   if (sn) sn.onclick = () => openShare(q, 'estimate');
   const ap = $app.querySelector('#appr');
-  if (ap) ap.onclick = () => {
-    const name = promptT('Nombre de quien aprobó:', S.getClient(q.clientId)?.name || '');
-    if (name === null) return;
-    S.createWorkOrder(q.id, name.trim(), 'marcada en la app');
-    toast('Orden de trabajo creada');
-    go('#/wo/' + q.id);
-  };
+  if (ap) ap.onclick = () => openManualApproval(q);
   pdf.onclick = async () => {
     const s = S.settings();
     const first = (S.getClient(q.clientId)?.name || '').split(' ')[0];
@@ -1613,6 +1683,7 @@ function viewWorks() {
 /* ---------- Vista pública (cliente) ---------- */
 let pubLang = null;
 let pubApproved = '';
+let pubRelayOk = null;
 function viewPublic(data, print) {
   setTabs(null);
   const p = S.decodeShare(data);
@@ -1643,7 +1714,9 @@ function viewPublic(data, print) {
     : pubApproved ? `
       <div class="card g" style="background:rgba(110,231,183,0.14)"><span style="font-weight:700;display:flex;gap:8px;align-items:center">${I.check} ${T.approved}</span>
         <span class="sig" style="font-size:24px">${esc(pubApproved)}</span><span class="small muted">${T.confirmNote}</span></div>
-      ${p.b.p ? `<a class="btn primary" target="_blank" rel="noopener" href="https://wa.me/${usPhone(p.b.p)}?text=${encodeURIComponent(confirmMsg)}">${I.whatsapp} ${T.confirm}</a>` : ''}
+      ${p.ch && pubRelayOk === null ? `<span class="small muted" style="text-align:center">${T.sending}</span>` : ''}
+      ${pubRelayOk ? `<div class="card g" style="gap:4px"><span style="font-weight:600">${T.sentAuto}</span><span class="small muted">${T.sentAutoNote}</span></div>` : ''}
+      ${p.b.p ? `<a class="btn ${pubRelayOk ? 'secondary' : 'primary'}" target="_blank" rel="noopener" href="https://wa.me/${usPhone(p.b.p)}?text=${encodeURIComponent(confirmMsg)}">${I.whatsapp} ${pubRelayOk ? T.alsoWa : T.confirm}</a>` : ''}
       ${q.pay && q.dep ? `<a class="btn green" href="${esc(q.pay)}" target="_blank" rel="noopener">${I.card} ${T.payDep} · ${S.money(t.deposit)}</a>` : ''}`
     : `<div class="card g"><span class="label">${T.accept}</span><label for="sig" class="small muted">${T.sign}</label>
         <input id="sig" class="sig" autocomplete="name" placeholder="${esc(q.client || 'Your name')}">
@@ -1657,6 +1730,10 @@ function viewPublic(data, print) {
     const v = sig.value.trim();
     if (v.length < 3) { toast(T.needName); sig.focus(); return; }
     pubApproved = v;
+    if (p.ch) {
+      fetch(RELAY + p.ch, { method: 'POST', body: JSON.stringify({ t: 'approve', id: q.id, n: q.n, sig: v, at: Date.now() }) })
+        .then((r) => { pubRelayOk = r.ok; route(); }).catch(() => { pubRelayOk = false; route(); });
+    }
     route();
   };
   if (print) setTimeout(() => window.print(), 400);
@@ -1668,7 +1745,7 @@ let route = function () {
   const h = location.hash || '';
   const [, page = '', arg = '', extra = ''] = h.split('/');
   const db = S.getDB();
-  if (h !== lastHash && !h.startsWith('#/c/')) { pubLang = null; pubApproved = ''; }
+  if (h !== lastHash && !h.startsWith('#/c/')) { pubLang = null; pubApproved = ''; pubRelayOk = null; }
   if (h !== lastHash) window.scrollTo(0, 0);
   lastHash = h;
   if (page === 'c' && arg) return viewPublic(arg, extra === 'print');
@@ -1719,6 +1796,10 @@ route = function () {
   if (!pub && UI() === 'en') { translateDOM($app); translateDOM($tab); }
 };
 window.addEventListener('hashchange', () => route());
+checkApprovals();
+setInterval(() => { if (document.visibilityState === 'visible') checkApprovals(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkApprovals(); });
+window.addEventListener('online', checkApprovals);
 watch(() => UI() === 'en' && !(location.hash || '').startsWith('#/c/'));
 route();
 

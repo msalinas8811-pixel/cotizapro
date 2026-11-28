@@ -23,12 +23,12 @@ const L10N = {
     desc: 'Description', qty: 'Qty', price: 'Unit price', amount: 'Amount', sub: 'Subtotal', tax: 'Tax', total: 'Total', paid: 'Paid', bal: 'Balance due',
     payments: 'Payments received', pay: 'Pay online', photos: 'Before & after photos', before: 'BEFORE', after: 'AFTER', warranty: 'Warranty', terms: 'Terms', thanks: 'Thank you for your business!', stampPaid: 'PAID',
     estTitle: 'ESTIMATE', valid: 'Valid until', start: 'Start date', duration: 'Duration', scope: 'Scope of work', excl: 'Not included', dep: 'Deposit due to start',
-    accept: 'Acceptance', approvedBy: 'Approved and signed by', sigCustomer: 'Customer signature', sigDate: 'Date', file: 'Estimate' },
+    accept: 'Acceptance', approvedBy: 'Approved by', approvedOnly: 'Approved by the customer', how: 'Approval', sigCustomer: 'Customer signature', sigDate: 'Date', file: 'Estimate' },
   es: { inv: 'FACTURA', no: 'Factura #', date: 'Fecha', due: 'Vence', wo: 'Orden de trabajo #', est: 'Cotización #', billTo: 'CLIENTE', job: 'TRABAJO', done: 'Terminado',
     desc: 'Descripción', qty: 'Cant.', price: 'Precio', amount: 'Monto', sub: 'Subtotal', tax: 'Impuesto', total: 'Total', paid: 'Pagado', bal: 'Saldo pendiente',
     payments: 'Pagos recibidos', pay: 'Pagar en línea', photos: 'Fotos del antes y después', before: 'ANTES', after: 'DESPUÉS', warranty: 'Garantía', terms: 'Condiciones', thanks: '¡Gracias por su preferencia!', stampPaid: 'PAGADA',
     estTitle: 'COTIZACIÓN', valid: 'Válida hasta', start: 'Fecha de inicio', duration: 'Duración', scope: 'Alcance del trabajo', excl: 'No incluye', dep: 'Anticipo para empezar',
-    accept: 'Aceptación', approvedBy: 'Aprobada y firmada por', sigCustomer: 'Firma del cliente', sigDate: 'Fecha', file: 'Cotizacion' }
+    accept: 'Aceptación', approvedBy: 'Aprobada por', approvedOnly: 'Aprobada por el cliente', how: 'Forma de aprobación', sigCustomer: 'Firma del cliente', sigDate: 'Fecha', file: 'Cotizacion' }
 };
 
 const d = (t, L) => t ? new Date(typeof t === 'string' && t.length === 10 ? t + 'T12:00' : t).toLocaleDateString(L === 'es' ? 'es-US' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
@@ -212,9 +212,12 @@ export async function buildDocPdf(q, kind = 'invoice') {
     if (y > H - 132) { doc.addPage(); y = M; }
     y += 4;
     doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...accent); doc.text(clean(T.accept.toUpperCase()), M, y); y += 12;
-    if (q.signature) {
+    if (q.approvedAt) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(5, 150, 105);
-      doc.text(clean(`${T.approvedBy} ${q.signature}${q.approvedAt ? '  -  ' + d(q.approvedAt, L) : ''}`), M, y);
+      const who = q.signature ? `${T.approvedBy} ${q.signature}` : T.approvedOnly;
+      doc.text(clean(`${who}  -  ${d(q.approvedAt, L)}`), M, y);
+      const how = S.approvalText(q, L);
+      if (how) { doc.setFontSize(8.5); doc.setTextColor(...muted); doc.text(clean(`${T.how}: ${how}`), M, y + 13); y += 13; }
       y += 16;
     } else {
       y += 22;

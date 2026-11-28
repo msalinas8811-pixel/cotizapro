@@ -164,9 +164,37 @@ export const STAGES = [
   'Trabajo terminado'
 ];
 
-export function createWorkOrder(id, signature, via) {
+// Formas en que el cliente puede aprobar
+export const APPROVAL_METHODS = {
+  link: { es: 'Por el link (firma digital)', en: 'Online (digital signature)' },
+  phone: { es: 'Por teléfono', en: 'By phone' },
+  message: { es: 'Por mensaje (WhatsApp / SMS)', en: 'By message (WhatsApp / SMS)' },
+  person: { es: 'En persona (casa del cliente)', en: "In person (at customer's home)" },
+  email: { es: 'Por correo', en: 'By email' },
+  other: { es: 'Otro', en: 'Other' }
+};
+export function approvalText(q, lang) {
+  const m = q?.approval;
+  if (!m) return '';
+  const base = (APPROVAL_METHODS[m.method] || APPROVAL_METHODS.other)[lang === 'en' ? 'en' : 'es'];
+  return m.note ? `${base} – ${m.note}` : base;
+}
+
+// Crear la clave del canal privado por donde llegan las aprobaciones de los clientes
+export function syncTopic() {
+  if (!db.settings.syncTopic) {
+    const r = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 24);
+    db.settings.syncTopic = 'cotizapro-' + r;
+    save();
+  }
+  return db.settings.syncTopic;
+}
+
+export function createWorkOrder(id, signature, via, method, note) {
   const q = getQuote(id);
   if (!q) return null;
+  const firstApproval = !q.approvedAt;
+  if (firstApproval || method) q.approval = { method: method || 'link', note: note || '', at: Date.now() };
   if (!q.wo) {
     q.wo = {
       number: db.nextWO++,
@@ -181,7 +209,7 @@ export function createWorkOrder(id, signature, via) {
   if (!['invoiced', 'paid'].includes(q.status)) q.status = 'approved';
   q.signature = signature || q.signature;
   q.approvedAt = q.approvedAt || Date.now();
-  q.history.push({ t: Date.now(), text: `Aprobada${signature ? ' y firmada por ' + signature : ''}${via ? ' (' + via + ')' : ''}` });
+  if (firstApproval || method) q.history.push({ t: Date.now(), text: `Aprobada${signature ? ' por ' + signature : ''} · ${approvalText(q, 'es')}` });
   save();
   return q;
 }

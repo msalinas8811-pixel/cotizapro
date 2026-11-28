@@ -170,6 +170,16 @@ export const EN = {
   'Ej. Pintura interior por cuarto': 'e.g. Interior painting per room', 'Ej. Interior painting – per room': 'e.g. Interior painting – per room',
   'Ej. 2 manos': 'e.g. 2 coats', 'Ej. 2 coats': 'e.g. 2 coats', 'Escribe la descripción de cada partida': 'Enter a description for each line item',
 
+  'Pendiente de aprobar': 'Awaiting approval', 'Cotización pendiente de aprobar por el cliente': 'Estimate awaiting customer approval',
+  'Ya se envió al cliente.': 'Already sent to the customer.', 'Todavía no se ha enviado al cliente.': 'Not sent to the customer yet.',
+  'Cuando el cliente la apruebe desde el link, se aprueba sola y se crea la orden de trabajo.': 'When the customer approves it from the link, it is approved automatically and the work order is created.',
+  'Cliente aprobó la cotización': 'Customer approved the estimate', 'Aprobación manual': 'Manual approval',
+  'Registra cómo te dio la aprobación. Se creará la orden de trabajo.': 'Record how the customer approved. The work order will be created.',
+  '¿Cómo la aprobó?': 'How did they approve?', 'Por teléfono': 'By phone', 'Por mensaje (WhatsApp / SMS)': 'By message (WhatsApp / SMS)',
+  'En persona (casa del cliente)': "In person (at customer's home)", 'Por correo': 'By email', 'Por el link (firma digital)': 'Online (digital signature)',
+  'Detalle de la aprobación (opcional)': 'Approval details (optional)', 'Ej. Llamada del 27 nov, habló con la señora Smith': 'e.g. Call on Nov 27, spoke with Mrs. Smith',
+  '¿Quién aprobó?': 'Who approved?', 'Aprobar y crear orden de trabajo': 'Approve and create work order',
+
   // PDF
   'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
 };
@@ -218,6 +228,9 @@ export const PATTERNS = [
   [/^Creada (.+)$/, 'Created $1'],
   [/^Inicio (.+)$/, 'Start $1'],
   [/^Orden #(\d+)$/, 'Order #$1'],
+  [/^El cliente aprobó la cotización #(\d+)$/, 'The customer approved estimate #$1'],
+  [/^Aprobada por (.+) · (.+)$/, (m, w, h) => `Approved by ${w} · ${({ 'Por el link (firma digital)': 'Online (digital signature)', 'Por teléfono': 'By phone', 'Por mensaje (WhatsApp / SMS)': 'By message', 'En persona (casa del cliente)': 'In person', 'Por correo': 'By email', 'Otro': 'Other' })[h.split(' – ')[0]] || h}`],
+  [/^Aprobada · (.+)$/, 'Approved · $1'],
   [/^(\d+) activos$/, '$1 active'],
   [/^Activos · (\d+)$/, 'Active · $1'],
   [/^(\d+) en obra$/, '$1 on a job'],
