@@ -1161,14 +1161,15 @@ function openManualApproval(q) {
 // La app la recibe al abrirse y cada pocos segundos mientras está abierta.
 const RELAY = 'https://ntfy.sh/';
 let checking = false;
-async function checkApprovals() {
+async function checkApprovals(manual) {
   const s = S.settings();
-  if (checking || !S.getDB().onboarded || !s.syncTopic || !navigator.onLine) return;
+  if (checking || !S.getDB().onboarded || !s.syncTopic) return manual ? 'none' : undefined;
   checking = true;
   try {
-    const since = s.syncSince || '7d';
-    const res = await fetch(`${RELAY}${s.syncTopic}/json?poll=1&since=${encodeURIComponent(since)}`, { cache: 'no-store' });
-    if (!res.ok) return;
+    const url = (since) => `${RELAY}${s.syncTopic}/json?poll=1&since=${encodeURIComponent(since)}`;
+    let res = await fetch(url(s.syncSince || 'all'), { cache: 'no-store' });
+    if (!res.ok && s.syncSince) { S.updateSettings({ syncSince: '' }); res = await fetch(url('all'), { cache: 'no-store' }); }
+    if (!res.ok) return 'error';
     const lines = (await res.text()).split('\n').filter(Boolean);
     let last = null;
     const approved = [];
@@ -1189,8 +1190,10 @@ async function checkApprovals() {
       const name = S.getClient(q.clientId)?.name || '';
       toast(UI() === 'en' ? `${name} approved estimate #${q.number}` : `${name} aprobó la cotización #${q.number}`);
       if (!/^#\/(quote-form|settings|employee)/.test(location.hash)) route();
+      return 'approved';
     }
-  } catch (e) { /* sin conexión: se revisa después */ } finally { checking = false; }
+    return 'none';
+  } catch (e) { return 'error'; } finally { checking = false; }
 }
 
 function viewDoc(id) {
@@ -1205,6 +1208,7 @@ function viewDoc(id) {
         <span style="font-weight:700;display:flex;gap:8px;align-items:center;color:var(--orange-soft)">${I.clock} Cotización pendiente de aprobar por el cliente</span>
         <span class="small muted">${q.status === 'sent' ? 'Ya se envió al cliente.' : 'Todavía no se ha enviado al cliente.'}</span>
         <span class="small muted">Cuando el cliente la apruebe desde el link, se aprueba sola y se crea la orden de trabajo.</span>
+        <button class="btn secondary" id="chk" style="min-height:44px;font-size:14px">${I.bell} Revisar si ya aprobó</button>
       </div>` : ''}
     <div class="row no-print">${chip(q)}
       <div class="seg" role="group" aria-label="Idioma de vista"><button data-l="en" aria-pressed="${L === 'en'}">EN</button><button data-l="es" aria-pressed="${L === 'es'}">ES</button></div></div>
@@ -1229,6 +1233,14 @@ function viewDoc(id) {
   if (sn) sn.onclick = () => openShare(q, 'estimate');
   const ap = $app.querySelector('#appr');
   if (ap) ap.onclick = () => openManualApproval(q);
+  const ck = $app.querySelector('#chk');
+  if (ck) ck.onclick = async () => {
+    ck.disabled = true;
+    const r = await checkApprovals(true);
+    if (r === 'none') toast('Todavía no hay aprobación de este cliente');
+    if (r === 'error') toast('No se pudo revisar. Revisa tu internet e intenta otra vez.');
+    if (r !== 'approved') ck.disabled = false;
+  };
   pdf.onclick = async () => {
     const s = S.settings();
     const first = (S.getClient(q.clientId)?.name || '').split(' ')[0];

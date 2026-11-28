@@ -180,6 +180,9 @@ export const EN = {
   'Detalle de la aprobación (opcional)': 'Approval details (optional)', 'Ej. Llamada del 27 nov, habló con la señora Smith': 'e.g. Call on Nov 27, spoke with Mrs. Smith',
   '¿Quién aprobó?': 'Who approved?', 'Aprobar y crear orden de trabajo': 'Approve and create work order',
 
+  'Revisar si ya aprobó': 'Check if approved', 'Todavía no hay aprobación de este cliente': 'No approval from this customer yet',
+  'No se pudo revisar. Revisa tu internet e intenta otra vez.': "Couldn't check. Check your internet and try again.",
+
   // PDF
   'No se pudo cargar el generador de PDF (recarga la app)': "Couldn't load the PDF generator (reload the app)"
 };
